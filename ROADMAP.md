@@ -31,19 +31,46 @@ linking** and a **200 requests/hour** rate limit — drive most of the design de
 
 ## Status (2026-06)
 
-Phases 1–3 are **implemented and tested** (Vitest, network-free via injected fetch): 23 tools
-across 7 toolsets. Shipped: `bulk_update_transactions`, `delete_transaction`,
+Phases 1–3 of the **tool** work are **implemented and tested** (Vitest, network-free via injected
+fetch): 23 tools across 7 toolsets. Shipped: `bulk_update_transactions`, `delete_transaction`,
 `find_duplicate_transactions`, `import_transactions`, `create_account`, `spending_summary`,
 `payee_transactions`, `category_transactions`, `list_scheduled_transactions`.
 
-**Deferred (clear next steps, not yet built):**
+## Direction shift: remote OAuth server (decided, not yet built)
 
+The product is moving from a local **stdio + Personal Access Token** tool to a **remote, multi-tenant
+MCP server authenticated via OAuth**, with YNAB as the upstream identity provider, hosted on
+Cloudflare Workers. Each user logs in through a browser, connects their own YNAB account, and is
+read-only by default. See the ADRs for the decisions and trade-offs:
+
+- [ADR-0001](docs/adr/0001-modular-architecture-injected-fetch-vitest.md) — modular, injected-fetch,
+  Vitest (what makes the runtime move cheap).
+- [ADR-0002](docs/adr/0002-remote-oauth-multi-tenant-ynab-upstream.md) — remote OAuth, multi-tenant,
+  YNAB upstream, read-only default.
+- [ADR-0003](docs/adr/0003-host-on-cloudflare-workers.md) — Cloudflare Workers (free), homelab
+  docker-compose fallback.
+
+## Not yet built
+
+- **The OAuth server itself** — Streamable-HTTP transport, `McpAgent`, `workers-oauth-provider`
+  brokering YNAB OAuth, per-user encrypted token store, refresh handling, the read-only→write
+  scope-elevation flow. This is the next major body of work (ADR-0002 / ADR-0003).
 - **Scheduled-transaction mutations** — only `list_scheduled_transactions` ships. `create`/`update`/
-  `delete` scheduled (the API supports full CRUD) are not wired yet.
-- **Delta-sync _cache_** — the client passes filters but does not yet thread `server_knowledge` or
-  persist a local store. The mechanism is the biggest lever against the 200/hr limit; it needs a
-  persistence layer (stdio servers are stateless across runs), so it's left as a deliberate next
-  step rather than a half-built cache.
+  `delete` (the API supports full CRUD) are not wired yet.
+- **Delta-sync _cache_** — the client passes filters but does not thread `server_knowledge` or
+  persist a store. Biggest lever against the 200/hr limit; needs the persistence layer that the
+  remote server will introduce, so it's deferred until then rather than half-built.
+
+## Known limitations / constraints
+
+- **Bank linking is impossible via the YNAB API** (app-only). The server creates only manual
+  accounts; `import_transactions` only refreshes accounts a user already linked in the app.
+- **YNAB Restricted Mode**: a new OAuth app can issue tokens to **only 25 users** until YNAB reviews
+  it (~2–4 weeks). Fine for personal/small use; a gate before opening it widely.
+- **Rate limit: 200 requests/hour per token** (per-user under OAuth, not pooled). Favors bulk ops
+  and `spending_summary` over many single calls.
+- **Cloudflare free-tier ceilings** (not blockers at ≤25 users): 10 ms CPU/request, 1,000 KV
+  writes/day.
 
 ## Planned tools (priority order)
 
