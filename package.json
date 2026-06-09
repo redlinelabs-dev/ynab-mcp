@@ -22,7 +22,9 @@
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "tsgo --noEmit && oxlint && oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "tsgo --noEmit && oxlint && oxfmt --check && vitest run",
     "fix": "oxlint --fix && oxfmt",
     "prepare": "husky"
   },
@@ -38,7 +40,8 @@
     "@typescript/native-preview": "latest",
     "husky": "^9.1.7",
     "oxfmt": "latest",
-    "oxlint": "latest"
+    "oxlint": "latest",
+    "vitest": "^4.1.8"
   },
   "engines": {
     "node": ">=24"

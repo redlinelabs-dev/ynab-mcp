@@ -29,9 +29,25 @@ linking** and a **200 requests/hour** rate limit — drive most of the design de
 | Recurring bills / upcoming        | _nothing_                                                      | `scheduled` toolset (list, and optionally CRUD)                 |
 | Spending history & habit analysis | `list_transactions(since_date)`, `list_months`, `get_month`    | `spending_summary` aggregator; per-payee/category history       |
 
+## Status (2026-06)
+
+Phases 1–3 are **implemented and tested** (Vitest, network-free via injected fetch): 23 tools
+across 7 toolsets. Shipped: `bulk_update_transactions`, `delete_transaction`,
+`find_duplicate_transactions`, `import_transactions`, `create_account`, `spending_summary`,
+`payee_transactions`, `category_transactions`, `list_scheduled_transactions`.
+
+**Deferred (clear next steps, not yet built):**
+
+- **Scheduled-transaction mutations** — only `list_scheduled_transactions` ships. `create`/`update`/
+  `delete` scheduled (the API supports full CRUD) are not wired yet.
+- **Delta-sync _cache_** — the client passes filters but does not yet thread `server_knowledge` or
+  persist a local store. The mechanism is the biggest lever against the 200/hr limit; it needs a
+  persistence layer (stdio servers are stateless across runs), so it's left as a deliberate next
+  step rather than a half-built cache.
+
 ## Planned tools (priority order)
 
-**Phase 1 — the daily driver (categorize / approve / dedupe)**
+**Phase 1 — the daily driver (categorize / approve / dedupe)** ✅ shipped
 
 - `bulk_update_transactions` ✏️ — `PATCH /budgets/{id}/transactions`, body `{transactions:[{id,
 category_id?, approved?, …}]}`. The workhorse: categorize and approve many txns in a single call

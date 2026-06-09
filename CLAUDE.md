@@ -6,10 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An MCP (Model Context Protocol) server for **YNAB** (You Need A Budget), published to npm as
 `@redlinelabs/ynab-mcp`. It exposes tools across the budget lifecycle — budgets, accounts,
-categories (incl. setting budgeted amounts), transactions (browse/create/update), months, and
-payees. Tools are grouped into **toolsets** (`budgets`, `accounts`, `categories`, `transactions`,
-`months`, `payees`) that operators enable/disable via env to keep the model's context lean. It
+categories (incl. setting budgeted amounts), transactions (browse, create, update, bulk-update,
+delete, find-duplicates, import, spending analysis), months, payees, and scheduled transactions.
+Tools are grouped into **toolsets** (`budgets`, `accounts`, `categories`, `transactions`, `months`,
+`payees`, `scheduled`) that operators enable/disable via env to keep the model's context lean. It
 talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio via `@modelcontextprotocol/sdk`.
+
+> **Bank linking is impossible via the YNAB API** (app-only); `create_account` makes manual
+> accounts, `import_transactions` only refreshes already-linked ones. Rate limit: **200 req/hr** —
+> prefer `bulk_update_transactions` and `spending_summary` over many single calls. See `ROADMAP.md`.
 
 > **Milliunits.** Every monetary amount in the YNAB API is in milliunits (`1000` = one currency
 > unit). The `units()` helper converts for display; read formatters emit both the raw value and a
@@ -21,14 +26,15 @@ talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio via `@modelcon
 npm run dev        # tsgo --watch (incremental compile)
 npm run build      # rm -rf dist && tsgo  → dist/index.js (the published bin)
 npm start          # node dist/index.js
-npm run check      # tsgo --noEmit && oxlint && oxfmt --check  ← the full gate
+npm test           # vitest run (the Vitest suite)
+npm run check      # tsgo --noEmit && oxlint && oxfmt --check && vitest run  ← the full gate
 npm run fix        # oxlint --fix && oxfmt   (auto-fix lint + format)
 npm run lint       # oxlint           (lint:fix to auto-fix)
 npm run fmt        # oxfmt            (fmt:check to verify only)
 ```
 
 `npm run check` is the source of truth for "is this correct" — it is what the pre-commit hook and
-CI both run. **There is no test runner / test suite** in this project; do not invent `npm test`.
+CI both run, and it now includes the Vitest suite. See **Testing** below.
 
 ## Toolchain (non-standard — read this before reaching for familiar tools)
 
@@ -43,7 +49,7 @@ Lint rules are strict and shape the code style:
 - `typescript/no-explicit-any: error` — no `any`.
 - `consistent-type-assertions: never` — **type assertions (`as`) are banned entirely** (`as const`
   is allowed). This is why the code uses Zod parsing + conditional object spreads / explicit field
-  copies (see `transactionBody`) instead of casts.
+  copies (see `buildSaveTransaction` in `src/transactions.ts`) instead of casts.
 
 Other constraints: **ESM only** (`"type": "module"`, `module: NodeNext`) — local/SDK imports use
 explicit `.js` extensions and `verbatimModuleSyntax` requires `import type` for type-only imports.
@@ -52,41 +58,45 @@ explicit `.js` extensions and `verbatimModuleSyntax` requires `import type` for 
 
 ## Architecture
 
-Everything lives in one file: **`src/index.ts`**, organized top-to-bottom into clearly-bannered
-layers. Understanding the layering is the key to navigating it:
+The code is split into small, single-purpose modules so the logic is unit-testable without the
+network. `src/index.ts` is a **thin bootstrap**; everything else is importable and side-effect-free
+on load (no env reads, no `process.exit`, no server start outside `index.ts`):
 
-1. **Config** — reads env vars; exits if `YNAB_TOKEN` is missing; builds the Bearer
-   `Authorization` header once at startup. `DEFAULT_BUDGET` falls back to the `last-used` alias.
-2. **Toolset gating** — `ENABLED_GROUPS` (from `YNAB_TOOLSETS`, default all) + `READ_ONLY` (from
-   `YNAB_READ_ONLY`); `isToolEnabled(group, write)` is the single predicate.
-3. **Zod schemas** — the contract for YNAB's API responses. YNAB wraps everything in `{ data: … }`;
-   `dataEnvelope()` unwraps it. **Resilience is deliberate:** every object uses `.passthrough()`
-   and fields use `.catch(...)` liberally. Keep this defensive style when adding schemas.
-4. **Inferred types** — `type X = z.infer<typeof XSchema>`; never hand-write these.
-5. **HTTP helpers** — `rawFetch` is the single fetch chokepoint (throws on non-2xx with a sliced
-   error body). `getTyped` parses GET responses; `sendTyped` handles POST/PUT/PATCH.
-6. **Formatters** — `formatAccount`, `formatCategory`, `formatTransaction`, etc. reshape validated
-   API objects into **compact, token-efficient JSON**, converting milliunits to `*_units`.
-7. **Tool input schemas** — Zod schemas validated at handler entry; `budget_id` is optional
-   everywhere (`resolveBudget` falls back to `DEFAULT_BUDGET`).
-8. **`TOOLS`** — the `const` array of MCP tool definitions returned by `ListTools`.
-9. **`handleTool(name, args)`** — a `switch` mapping each tool name to its logic; returns a string.
-10. **Server bootstrap** — wires `ListTools`/`CallTool` (errors, incl. `ZodError`, are caught and
-    returned as `isError` text) and connects the stdio transport.
+- **`src/index.ts`** — bootstrap only. Reads env (`YNAB_TOKEN`, `YNAB_BUDGET_ID`, `YNAB_TOOLSETS`,
+  `YNAB_READ_ONLY`), exits if the token is missing, builds a `ToolContext`, and wires the MCP
+  `ListTools`/`CallTool` handlers over stdio (errors incl. `ZodError` caught → `isError` text).
+- **`src/client.ts`** — `YnabClient`, the single HTTP seam. **`fetch` is injected** (defaults to
+  global) so tests run network-free. `rawFetch` throws on non-2xx; `getTyped`/`sendTyped` validate
+  every response through a Zod schema. One typed method per endpoint.
+- **`src/schemas.ts`** — Zod schemas + inferred types. YNAB wraps responses in `{ data: … }`;
+  `dataEnvelope()` unwraps. **Resilience is deliberate:** `.passthrough()` on every object,
+  `.catch(...)` on fields. Keep this defensive style.
+- **`src/tools.ts`** — `TOOLS` (the definition array, tagged `group`/`write`) + `handleTool(ctx,
+name, args)` dispatch. Parses args with Zod input schemas, calls the client, folds in pure logic.
+- **`src/toolsets.ts`** — pure gating: `parseToolsets`, `parseReadOnly`, `isToolEnabled`, the
+  `ToolGroup` union + `ALL_GROUPS`.
+- **`src/duplicates.ts`** — `findDuplicateTransactions` (pure dedup detection).
+- **`src/summary.ts`** — `summarizeSpending` (pure aggregation).
+- **`src/transactions.ts`** — `buildSaveTransaction` / `buildBulkTransactionsBody` (pure body
+  builders; omit `undefined`, preserve explicit `null`).
+- **`src/format.ts`** + **`src/money.ts`** — token-efficient output shaping + milliunit→`units`.
 
 ### Adding or changing a tool
 
-A new tool touches **four** places — keep them in sync or the tool won't work:
+1. Add a typed **method** to `YnabClient` (`src/client.ts`) + any **response schema** in
+   `src/schemas.ts`.
+2. Add a Zod **input schema** + a **`TOOLS`** entry + a **`case`** in `handleTool` (all in
+   `src/tools.ts`). Each `TOOLS` entry's `group`/`write` tags drive toolset gating.
+3. Usually a **`formatX`** in `src/format.ts` for compact output.
+4. New domain = a new `ToolGroup` literal in `src/toolsets.ts` (`ALL_GROUPS` + the union).
 
-1. A Zod **input schema** (or reuse/`.extend()` an existing one like `BudgetArg`).
-2. An entry in the **`TOOLS`** array. Each entry has `name`, **`group`** (a `ToolGroup` toolset),
-   **`write`** (true if it mutates), `description`, and JSON `inputSchema`. The `group`/`write`
-   tags are what `YNAB_TOOLSETS` / `YNAB_READ_ONLY` filter on.
-3. A **`case`** in the `handleTool` switch.
-4. Usually a **response Zod schema + a `formatX` formatter** for token-efficient output.
+## Testing
 
-Adding a new domain = a new `ToolGroup` literal (update the type + `ALL_GROUPS`) — no other
-framework change.
+Vitest (`npm test`, folded into `npm run check`). Tests live in `test/` and exercise public module
+interfaces — pure logic directly, and the client/dispatch through an **injected fake `fetch`** so
+they never hit the live API or the 200 req/hr limit. Build excludes `test/` (it's outside `src`).
+Follow TDD for new behavior: one failing test → minimal code → repeat. The lint rules still apply
+to tests (no `any`, no `as` — type the fake `fetch` with an annotation, not an assertion).
 
 ## Auth & environment
 

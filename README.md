@@ -7,6 +7,10 @@ months, and to make targeted edits (set a category's budgeted amount, create/upd
 > All monetary amounts in YNAB are **milliunits** — `1000` = one currency unit. Read tools return
 > both the raw milliunit value and a human-friendly `*_units` sibling; write tools take milliunits.
 
+> **Bank linking is not possible via the YNAB API** — it's a YNAB web/app-only feature. This server
+> creates only _manual_ accounts; once you've linked a bank in the app, `import_transactions` can
+> pull its latest activity. The API rate limit is **200 requests/hour** per token.
+
 ## Tools
 
 Tools are organized into **toolsets** (groups) you can enable/disable — see
@@ -22,10 +26,11 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 
 ### `accounts`
 
-| Tool            | Description                         |
-| --------------- | ----------------------------------- |
-| `list_accounts` | Accounts in a budget, with balances |
-| `get_account`   | One account by id                   |
+| Tool                | Description                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| `list_accounts`     | Accounts in a budget, with balances                           |
+| `get_account`       | One account by id                                             |
+| `create_account` ✏️ | Create a **manual** account (API can't bank-link — see below) |
 
 ### `categories`
 
@@ -37,12 +42,25 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 
 ### `transactions`
 
-| Tool                    | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `list_transactions`     | Transactions (filter by account/date/type) |
-| `get_transaction`       | One transaction by id                      |
-| `create_transaction` ✏️ | Create a transaction                       |
-| `update_transaction` ✏️ | Update fields on an existing transaction   |
+| Tool                          | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `list_transactions`           | Transactions (filter by account/date/`uncategorized`/`unapproved`) |
+| `get_transaction`             | One transaction by id                                              |
+| `create_transaction` ✏️       | Create a transaction                                               |
+| `update_transaction` ✏️       | Update fields on an existing transaction                           |
+| `bulk_update_transactions` ✏️ | Categorize and/or approve **many** transactions in one call        |
+| `delete_transaction` ✏️       | Delete a transaction (e.g. a confirmed duplicate)                  |
+| `find_duplicate_transactions` | Find duplicate clusters (same account+amount+date) for review      |
+| `import_transactions` ✏️      | Pull latest activity on already bank-linked accounts               |
+| `spending_summary`            | Aggregate spend by category/payee over a date range                |
+| `payee_transactions`          | Transaction history for one payee                                  |
+| `category_transactions`       | Transaction history for one category                               |
+
+### `scheduled`
+
+| Tool                          | Description                                   |
+| ----------------------------- | --------------------------------------------- |
+| `list_scheduled_transactions` | Recurring/upcoming transactions with next due |
 
 ### `months`
 
@@ -115,7 +133,7 @@ To avoid bloating the model's context window, you can expose only the tool group
 independent controls:
 
 - **`YNAB_TOOLSETS`** — comma-separated group names, or `all` (default). Groups: `budgets`,
-  `accounts`, `categories`, `transactions`, `months`, `payees`.
+  `accounts`, `categories`, `transactions`, `months`, `payees`, `scheduled`.
 - **`YNAB_READ_ONLY`** — `true`/`1` exposes only non-mutating tools (drops every `✏️` tool).
 
 ```env
@@ -130,10 +148,14 @@ Disabled tools are hidden from `tools/list` and rejected if called directly.
 
 ```bash
 npm install
-npm run dev       # watch mode
-npm run check     # typecheck + lint + format check
-npm run build     # production build
+npm run dev        # watch mode
+npm test           # run the Vitest suite
+npm run check      # typecheck + lint + format check + tests
+npm run build      # production build
 ```
+
+Tests are unit/integration style against the public module interfaces, using an injected fake
+`fetch` — they never touch the live YNAB API or the rate limit.
 
 ## Versioning
 
