@@ -52,14 +52,22 @@ read-only by default. See the ADRs for the decisions and trade-offs:
 
 ## Not yet built
 
-- **The OAuth server itself** — Streamable-HTTP transport, `McpAgent`, `workers-oauth-provider`
-  brokering YNAB OAuth, per-user encrypted token store, refresh handling, the read-only→write
-  scope-elevation flow. This is the next major body of work (ADR-0002 / ADR-0003).
-- **Scheduled-transaction mutations** — only `list_scheduled_transactions` ships. `create`/`update`/
-  `delete` (the API supports full CRUD) are not wired yet.
 - **Delta-sync _cache_** — the client passes filters but does not thread `server_knowledge` or
   persist a store. Biggest lever against the 200/hr limit; needs the persistence layer that the
   remote server will introduce, so it's deferred until then rather than half-built.
+- **Deployment** — `wrangler.toml` has a placeholder KV namespace id. Run
+  `wrangler kv namespace create OAUTH_KV`, paste the id into `wrangler.toml`, set secrets
+  (`YNAB_CLIENT_ID`, `YNAB_CLIENT_SECRET`, `YNAB_REDIRECT_URI`, `COOKIE_SECRET`) via
+  `wrangler secret put`, then `wrangler deploy`.
+
+## Shipped
+
+- **Tool layer (phases 1–3)** — 23 tools across 7 toolsets, fully tested (Vitest, network-free).
+- **Scheduled-transaction CRUD** — `list`, `get`, `create`, `update`, `delete_scheduled_transaction`.
+- **Cloudflare Workers OAuth layer** — Streamable-HTTP transport via `McpAgent`, YNAB
+  authorization code exchange, token refresh with KV write-back, state-cookie CSRF protection,
+  scope-gated read-only/full contexts, `/authorize` and `/callback` routing in the worker fetch
+  handler. Fully tested (105 Vitest tests, network-free).
 
 ## Known limitations / constraints
 

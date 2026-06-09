@@ -10,6 +10,7 @@ import {
   makeToolContext,
   makeToolContextFromProps,
 } from "../src/worker-config.js";
+import { kvStorage, parseScope } from "../src/worker-helpers.js";
 
 const oauthConfig: OAuthConfig = {
   authorizeEndpoint: "https://app.ynab.com/oauth/authorize",
@@ -217,5 +218,52 @@ describe("initFromStorage", () => {
     await expect(initFromStorage(storage, oauthConfig, fn, 1000000000000)).rejects.toThrow(
       /oauth/i,
     );
+  });
+});
+
+describe("parseScope", () => {
+  it("returns 'full' when the scope param is 'write'", () => {
+    const params = new URLSearchParams("scope=write");
+    expect(parseScope(params)).toBe("full");
+  });
+
+  it("returns 'read-only' for any value other than 'write'", () => {
+    expect(parseScope(new URLSearchParams("scope=read-only"))).toBe("read-only");
+    expect(parseScope(new URLSearchParams(""))).toBe("read-only");
+    expect(parseScope(new URLSearchParams("scope=WRITE"))).toBe("read-only");
+  });
+});
+
+describe("kvStorage", () => {
+  it("calls kv.put with JSON.stringify of the value", async () => {
+    const puts: Array<{ key: string; value: string }> = [];
+    const fakeKV = {
+      get: (_key: string, _type: "json") => Promise.resolve(null),
+      put: (key: string, value: string) => {
+        puts.push({ key, value });
+        return Promise.resolve();
+      },
+    };
+    const storage = kvStorage(fakeKV);
+    const props = { accessToken: "tok", refreshToken: "rt", expiresAt: 123, readOnly: true };
+
+    await storage.put("oauth_props", props);
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.key).toBe("oauth_props");
+    expect(puts[0]?.value).toBe(JSON.stringify(props));
+  });
+
+  it("returns whatever kv.get returns (json-parsed value from KV)", async () => {
+    const stored = { accessToken: "tok", refreshToken: "rt", expiresAt: 999, readOnly: false };
+    const fakeKV = {
+      get: (_key: string, _type: "json") => Promise.resolve(stored),
+      put: (_key: string, _value: string) => Promise.resolve(),
+    };
+    const storage = kvStorage(fakeKV);
+
+    const result = await storage.get("oauth_props");
+
+    expect(result).toBe(stored);
   });
 });

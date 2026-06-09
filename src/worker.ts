@@ -3,19 +3,14 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { McpAgent } from "agents/mcp";
 import { z } from "zod";
 
-import type { OAuthStorage } from "./worker-config.js";
+import type { WorkerKV } from "./worker-helpers.js";
 
 import { oauthConfig } from "./oauth-config.js";
 import { handleOAuthAuthorize, handleOAuthCallback } from "./oauth-handler.js";
 import { handleTool, TOOLS } from "./tools.js";
 import { isToolEnabled } from "./toolsets.js";
 import { initFromStorage, makeToolContext } from "./worker-config.js";
-
-// Minimal Cloudflare types — only the surface we use (avoids a types package dep).
-interface WorkerKV {
-  get(key: string, type: "json"): Promise<unknown>;
-  put(key: string, value: string): Promise<void>;
-}
+import { kvStorage, parseScope } from "./worker-helpers.js";
 
 interface WorkerCtx {
   waitUntil(promise: Promise<unknown>): void;
@@ -29,13 +24,6 @@ interface Env {
   YNAB_CLIENT_SECRET: string;
   YNAB_REDIRECT_URI: string;
   COOKIE_SECRET: string;
-}
-
-function kvStorage(kv: WorkerKV): OAuthStorage {
-  return {
-    get: (key) => kv.get(key, "json"),
-    put: (key, val) => kv.put(key, JSON.stringify(val)),
-  };
 }
 
 export class YnabMCP extends McpAgent<Env> {
@@ -90,9 +78,7 @@ export default {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/authorize") {
-      const reqUrl = new URL(request.url);
-      const scope = reqUrl.searchParams.get("scope") === "write" ? "full" : "read-only";
-      return handleOAuthAuthorize(oauthConfig(env), scope);
+      return handleOAuthAuthorize(oauthConfig(env), parseScope(new URL(request.url).searchParams));
     }
 
     if (pathname === "/callback") {
