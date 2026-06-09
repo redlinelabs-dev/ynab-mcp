@@ -25,6 +25,43 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+async function hmacSign(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+}
+
+async function hmacVerify(secret: string, message: string, mac: string): Promise<boolean> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  try {
+    const b64 = mac.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const macBytes = Uint8Array.from(atob(b64 + pad), (c) => c.charCodeAt(0));
+    return crypto.subtle.verify("HMAC", key, macBytes, new TextEncoder().encode(message));
+  } catch {
+    return false;
+  }
+}
+
+// Cookie name uses __Host- prefix: requires Secure + Path=/ + no Domain.
+// Prevents sibling-subdomain shadowing and locks the cookie to this exact origin.
+const COOKIE_NAME = "__Host-oauth_state";
+
 export async function handleOAuthCallback(
   request: Request,
   storage: OAuthStorage,
@@ -34,15 +71,28 @@ export async function handleOAuthCallback(
 ): Promise<Response> {
   const url = new URL(request.url);
   const stateParam = url.searchParams.get("state");
-  const cookieVal = parseCookieValue(request.headers.get("cookie"), "oauth_state");
+  const cookieVal = parseCookieValue(request.headers.get("cookie"), COOKIE_NAME);
 
-  // Cookie encodes both state UUID and scope as "uuid.scope" (UUIDs have no dots).
-  const lastDot = cookieVal ? cookieVal.lastIndexOf(".") : -1;
-  const statePart = lastDot >= 0 ? cookieVal!.slice(0, lastDot) : (cookieVal ?? "");
-  const scopePart = lastDot >= 0 ? cookieVal!.slice(lastDot + 1) : "read-only";
+  // Cookie format: state.scope.mac — mac = HMAC-SHA256(cookieSecret, "state.scope")
+  if (!cookieVal) {
+    return new Response("Invalid or missing state parameter", { status: 400 });
+  }
+  const lastDot = cookieVal.lastIndexOf(".");
+  if (lastDot < 0) {
+    return new Response("Invalid or missing state parameter", { status: 400 });
+  }
+  const mac = cookieVal.slice(lastDot + 1);
+  const payload = cookieVal.slice(0, lastDot); // "state.scope"
+  const scopeDot = payload.lastIndexOf(".");
+  const statePart = scopeDot >= 0 ? payload.slice(0, scopeDot) : payload;
+  const scopePart = scopeDot >= 0 ? payload.slice(scopeDot + 1) : "read-only";
   const readOnly = scopePart !== "full";
 
-  if (!stateParam || !cookieVal || !safeEqual(stateParam, statePart)) {
+  if (!stateParam || !safeEqual(stateParam, statePart)) {
+    return new Response("Invalid or missing state parameter", { status: 400 });
+  }
+
+  if (!(await hmacVerify(config.cookieSecret, payload, mac))) {
     return new Response("Invalid or missing state parameter", { status: 400 });
   }
 
@@ -67,23 +117,27 @@ export async function handleOAuthCallback(
   }
 }
 
-export function handleOAuthAuthorize(
+export async function handleOAuthAuthorize(
   config: OAuthConfig,
   scope: "read-only" | "full" = "read-only",
-): Response {
+): Promise<Response> {
   const state = crypto.randomUUID();
-  const url = new URL(config.authorizeEndpoint);
-  url.searchParams.set("client_id", config.clientId);
-  url.searchParams.set("redirect_uri", config.redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("state", state);
-  if (scope === "read-only") url.searchParams.set("scope", "read-only");
+  const payload = `${state}.${scope}`;
+  const mac = await hmacSign(config.cookieSecret, payload);
+
+  const redirectUrl = new URL(config.authorizeEndpoint);
+  redirectUrl.searchParams.set("client_id", config.clientId);
+  redirectUrl.searchParams.set("redirect_uri", config.redirectUri);
+  redirectUrl.searchParams.set("response_type", "code");
+  redirectUrl.searchParams.set("state", state);
+  if (scope === "read-only") redirectUrl.searchParams.set("scope", "read-only");
   return new Response(null, {
     status: 302,
     headers: {
-      Location: url.toString(),
-      // Cookie encodes scope alongside state UUID so the callback knows which scope was granted.
-      "Set-Cookie": `oauth_state=${state}.${scope}; HttpOnly; SameSite=Lax; Secure; Path=/callback; Max-Age=600`,
+      Location: redirectUrl.toString(),
+      // __Host- requires Secure + Path=/ + no Domain — prevents subdomain shadowing.
+      // Value is state.scope.mac so the MAC binds scope to the state UUID.
+      "Set-Cookie": `${COOKIE_NAME}=${payload}.${mac}; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=600`,
     },
   });
 }

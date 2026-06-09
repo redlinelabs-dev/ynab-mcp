@@ -10,7 +10,7 @@ import { handleOAuthAuthorize, handleOAuthCallback } from "./oauth-handler.js";
 import { handleTool, TOOLS } from "./tools.js";
 import { isToolEnabled } from "./toolsets.js";
 import { initFromStorage, makeToolContext } from "./worker-config.js";
-import { kvStorage, parseScope } from "./worker-helpers.js";
+import { kvStorage } from "./worker-helpers.js";
 
 interface WorkerCtx {
   waitUntil(promise: Promise<unknown>): void;
@@ -30,6 +30,10 @@ export class YnabMCP extends McpAgent<Env> {
   server = new Server({ name: "ynab", version: "0.1.0" }, { capabilities: { tools: {} } });
 
   async init() {
+    // KNOWN LIMITATION (single-user): OAuth props are stored under a fixed KV key.
+    // Multi-tenant support requires keying KV by a stable user identity derived from
+    // an authenticated session, and routing McpAgent DO stubs per-user. Deferred until
+    // the auth identity layer is built.
     const ctx = this.env.YNAB_DEV_TOKEN
       ? makeToolContext(this.env.YNAB_DEV_TOKEN)
       : (
@@ -78,7 +82,9 @@ export default {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/authorize") {
-      return handleOAuthAuthorize(oauthConfig(env), parseScope(new URL(request.url).searchParams));
+      // Always read-only from the public endpoint — scope is a server-side decision,
+      // not an unauthenticated query param (prevents CSRF scope elevation).
+      return handleOAuthAuthorize(oauthConfig(env));
     }
 
     if (pathname === "/callback") {

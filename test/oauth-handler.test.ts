@@ -39,11 +39,11 @@ function fakeStorage(): { storage: OAuthStorage; puts: Array<{ key: string; val:
 }
 
 // Calls handleOAuthAuthorize and builds a matching callback request (valid state roundtrip).
-function makeCallbackRequest(
+async function makeCallbackRequest(
   pathAndQuery: string,
   scope: "read-only" | "full" = "read-only",
-): Request {
-  const authRes = handleOAuthAuthorize(config, scope);
+): Promise<Request> {
+  const authRes = await handleOAuthAuthorize(config, scope);
   const location = authRes.headers.get("location") ?? "";
   const state = new URL(location).searchParams.get("state") ?? "";
   const setCookie = authRes.headers.get("set-cookie") ?? "";
@@ -58,7 +58,7 @@ function makeCallbackRequest(
 
 describe("handleOAuthCallback", () => {
   it("returns 400 when the code query param is missing", async () => {
-    const req = makeCallbackRequest("/callback");
+    const req = await makeCallbackRequest("/callback");
     const { storage } = fakeStorage();
 
     const res = await handleOAuthCallback(req, storage, config, fakeFetch(200, tokenResponse), 0);
@@ -87,7 +87,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("returns 400 when the state param does not match the cookie", async () => {
-    const authRes = handleOAuthAuthorize(config);
+    const authRes = await handleOAuthAuthorize(config);
     const setCookie = authRes.headers.get("set-cookie") ?? "";
     const stateCookie = setCookie.split(";")[0] ?? "";
 
@@ -102,8 +102,24 @@ describe("handleOAuthCallback", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 when the cookie MAC has been tampered with", async () => {
+    const authRes = await handleOAuthAuthorize(config);
+    const location = authRes.headers.get("location") ?? "";
+    const state = new URL(location).searchParams.get("state") ?? "";
+    // Replace the legitimate cookie value with a forged one (scope escalation attempt).
+    const forgedCookieValue = `__Host-oauth_state=${state}.full.invalidsignature`;
+    const req = new Request(`https://ynab.example.com/callback?code=auth-code-123&state=${state}`, {
+      headers: { Cookie: forgedCookieValue },
+    });
+    const { storage } = fakeStorage();
+
+    const res = await handleOAuthCallback(req, storage, config, fakeFetch(200, tokenResponse), 0);
+
+    expect(res.status).toBe(400);
+  });
+
   it("exchanges code and stores OAuth props when code and state are valid", async () => {
-    const req = makeCallbackRequest("/callback?code=auth-code-123");
+    const req = await makeCallbackRequest("/callback?code=auth-code-123");
     const nowMs = 1000000000000;
     const { storage, puts } = fakeStorage();
 
@@ -121,7 +137,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("stores props with expiresAt = nowMs + expiresIn * 1000", async () => {
-    const req = makeCallbackRequest("/callback?code=auth-code-123");
+    const req = await makeCallbackRequest("/callback?code=auth-code-123");
     const nowMs = 1000000000000;
     const { storage, puts } = fakeStorage();
 
@@ -131,7 +147,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("stores the access and refresh tokens from YNAB response", async () => {
-    const req = makeCallbackRequest("/callback?code=auth-code-123");
+    const req = await makeCallbackRequest("/callback?code=auth-code-123");
     const { storage, puts } = fakeStorage();
 
     await handleOAuthCallback(req, storage, config, fakeFetch(200, tokenResponse), 0);
@@ -143,7 +159,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("stores readOnly=true in props when the default (read-only) scope was used", async () => {
-    const req = makeCallbackRequest("/callback?code=auth-code-123");
+    const req = await makeCallbackRequest("/callback?code=auth-code-123");
     const { storage, puts } = fakeStorage();
 
     await handleOAuthCallback(req, storage, config, fakeFetch(200, tokenResponse), 0);
@@ -152,7 +168,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("stores readOnly=false in props when full scope was used", async () => {
-    const req = makeCallbackRequest("/callback?code=auth-code-123", "full");
+    const req = await makeCallbackRequest("/callback?code=auth-code-123", "full");
     const { storage, puts } = fakeStorage();
 
     await handleOAuthCallback(req, storage, config, fakeFetch(200, tokenResponse), 0);
@@ -161,7 +177,7 @@ describe("handleOAuthCallback", () => {
   });
 
   it("returns 502 with a message when YNAB token exchange fails", async () => {
-    const req = makeCallbackRequest("/callback?code=bad-code");
+    const req = await makeCallbackRequest("/callback?code=bad-code");
     const { storage } = fakeStorage();
 
     const res = await handleOAuthCallback(
@@ -179,68 +195,75 @@ describe("handleOAuthCallback", () => {
 });
 
 describe("handleOAuthAuthorize", () => {
-  it("returns a 302 redirect", () => {
-    const res = handleOAuthAuthorize(config);
+  it("returns a 302 redirect", async () => {
+    const res = await handleOAuthAuthorize(config);
     expect(res.status).toBe(302);
   });
 
-  it("redirects to the YNAB authorize endpoint", () => {
-    const res = handleOAuthAuthorize(config);
+  it("redirects to the YNAB authorize endpoint", async () => {
+    const res = await handleOAuthAuthorize(config);
     const location = res.headers.get("location") ?? "";
     expect(location.startsWith("https://app.ynab.com/oauth/authorize")).toBe(true);
   });
 
-  it("includes client_id in the redirect URL", () => {
-    const res = handleOAuthAuthorize(config);
+  it("includes client_id in the redirect URL", async () => {
+    const res = await handleOAuthAuthorize(config);
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.get("client_id")).toBe("test-client-id");
   });
 
-  it("includes redirect_uri in the redirect URL", () => {
-    const res = handleOAuthAuthorize(config);
+  it("includes redirect_uri in the redirect URL", async () => {
+    const res = await handleOAuthAuthorize(config);
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.get("redirect_uri")).toBe("https://ynab.example.com/callback");
   });
 
-  it("includes response_type=code in the redirect URL", () => {
-    const res = handleOAuthAuthorize(config);
+  it("includes response_type=code in the redirect URL", async () => {
+    const res = await handleOAuthAuthorize(config);
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.get("response_type")).toBe("code");
   });
 
-  it("includes a non-empty state param in the redirect URL", () => {
-    const res = handleOAuthAuthorize(config);
+  it("includes a non-empty state param in the redirect URL", async () => {
+    const res = await handleOAuthAuthorize(config);
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.get("state")).toBeTruthy();
   });
 
-  it("sets an HttpOnly oauth_state cookie matching the state param", () => {
-    const res = handleOAuthAuthorize(config);
+  it("sets an HttpOnly __Host-oauth_state cookie containing the state param", async () => {
+    const res = await handleOAuthAuthorize(config);
     const location = res.headers.get("location") ?? "";
     const state = new URL(location).searchParams.get("state") ?? "";
     const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain(`oauth_state=${state}`);
+    expect(cookie).toContain(state);
+    expect(cookie).toContain("__Host-oauth_state");
     expect(cookie.toLowerCase()).toContain("httponly");
   });
 
-  it("generates a different state on each call", () => {
+  it("sets Path=/ on the cookie (required by __Host- prefix)", async () => {
+    const res = await handleOAuthAuthorize(config);
+    const cookie = res.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("Path=/");
+  });
+
+  it("generates a different state on each call", async () => {
     const state1 = new URL(
-      handleOAuthAuthorize(config).headers.get("location") ?? "",
+      (await handleOAuthAuthorize(config)).headers.get("location") ?? "",
     ).searchParams.get("state");
     const state2 = new URL(
-      handleOAuthAuthorize(config).headers.get("location") ?? "",
+      (await handleOAuthAuthorize(config)).headers.get("location") ?? "",
     ).searchParams.get("state");
     expect(state1).not.toBe(state2);
   });
 
-  it("includes scope=read-only in the redirect URL by default", () => {
-    const res = handleOAuthAuthorize(config);
+  it("includes scope=read-only in the redirect URL by default", async () => {
+    const res = await handleOAuthAuthorize(config);
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.get("scope")).toBe("read-only");
   });
 
-  it("omits the scope param when scope='full' (grants write access)", () => {
-    const res = handleOAuthAuthorize(config, "full");
+  it("omits the scope param when scope='full' (grants write access)", async () => {
+    const res = await handleOAuthAuthorize(config, "full");
     const url = new URL(res.headers.get("location") ?? "");
     expect(url.searchParams.has("scope")).toBe(false);
   });
