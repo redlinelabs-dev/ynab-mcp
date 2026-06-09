@@ -72,4 +72,71 @@ describe("handleTool", () => {
       expect(typeof t.write).toBe("boolean");
     }
   });
+
+  const scheduledPayload = {
+    data: {
+      scheduled_transaction: {
+        id: "s1",
+        date_first: "2026-06-01",
+        date_next: "2026-07-01",
+        frequency: "monthly",
+        amount: -50000,
+        payee_name: "Landlord",
+        category_name: "Rent",
+        account_id: "acct-1",
+        account_name: "Checking",
+        memo: null,
+      },
+    },
+  };
+
+  it("get_scheduled_transaction returns a formatted scheduled transaction", async () => {
+    const ctx = ctxWith(fetchReturning(scheduledPayload));
+
+    const out = JSON.parse(
+      await handleTool(ctx, "get_scheduled_transaction", { scheduled_transaction_id: "s1" }),
+    );
+
+    expect(out.id).toBe("s1");
+    expect(out.frequency).toBe("monthly");
+    expect(out.amount_units).toBe(-50);
+  });
+
+  it("create_scheduled_transaction creates and returns formatted scheduled transaction", async () => {
+    const ctx = ctxWith(fetchReturning(scheduledPayload));
+
+    const out = JSON.parse(
+      await handleTool(ctx, "create_scheduled_transaction", {
+        account_id: "acct-1",
+        date: "2026-06-01",
+        amount: -50000,
+        frequency: "monthly",
+      }),
+    );
+
+    expect(out.id).toBe("s1");
+  });
+
+  it("update_scheduled_transaction updates and returns formatted scheduled transaction", async () => {
+    const ctx = ctxWith(fetchReturning(scheduledPayload));
+
+    const out = JSON.parse(
+      await handleTool(ctx, "update_scheduled_transaction", {
+        scheduled_transaction_id: "s1",
+        amount: -50000,
+      }),
+    );
+
+    expect(out.id).toBe("s1");
+  });
+
+  it("delete_scheduled_transaction deletes and returns formatted scheduled transaction", async () => {
+    const ctx = ctxWith(fetchReturning(scheduledPayload));
+
+    const out = JSON.parse(
+      await handleTool(ctx, "delete_scheduled_transaction", { scheduled_transaction_id: "s1" }),
+    );
+
+    expect(out.id).toBe("s1");
+  });
 });

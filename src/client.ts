@@ -9,7 +9,7 @@
 
 import type { z } from "zod";
 
-import type { BulkTxnUpdate } from "./transactions.js";
+import type { BulkTxnUpdate, SaveScheduledTxnFields } from "./transactions.js";
 import type { SaveTxnFields } from "./transactions.js";
 
 import {
@@ -24,11 +24,16 @@ import {
   MonthResponseSchema,
   MonthsResponseSchema,
   PayeesResponseSchema,
+  ScheduledTransactionResponseSchema,
   ScheduledTransactionsResponseSchema,
   TransactionResponseSchema,
   TransactionsResponseSchema,
 } from "./schemas.js";
-import { buildBulkTransactionsBody, buildSaveTransaction } from "./transactions.js";
+import {
+  buildBulkTransactionsBody,
+  buildSaveScheduledTransaction,
+  buildSaveTransaction,
+} from "./transactions.js";
 
 export type FetchFn = typeof fetch;
 
@@ -251,6 +256,47 @@ export class YnabClient {
       `/budgets/${budget}/scheduled_transactions`,
     );
     return data.data.scheduled_transactions;
+  }
+
+  async getScheduledTransaction(budget: string, scheduledTransactionId: string) {
+    const data = await this.getTyped(
+      ScheduledTransactionResponseSchema,
+      `/budgets/${budget}/scheduled_transactions/${scheduledTransactionId}`,
+    );
+    return data.data.scheduled_transaction;
+  }
+
+  async createScheduledTransaction(budget: string, fields: SaveScheduledTxnFields) {
+    const data = await this.sendTyped(
+      "POST",
+      ScheduledTransactionResponseSchema,
+      `/budgets/${budget}/scheduled_transactions`,
+      { scheduled_transaction: buildSaveScheduledTransaction(fields) },
+    );
+    return data.data.scheduled_transaction;
+  }
+
+  async updateScheduledTransaction(
+    budget: string,
+    scheduledTransactionId: string,
+    fields: SaveScheduledTxnFields,
+  ) {
+    const data = await this.sendTyped(
+      "PUT",
+      ScheduledTransactionResponseSchema,
+      `/budgets/${budget}/scheduled_transactions/${scheduledTransactionId}`,
+      { scheduled_transaction: buildSaveScheduledTransaction(fields) },
+    );
+    return data.data.scheduled_transaction;
+  }
+
+  async deleteScheduledTransaction(budget: string, scheduledTransactionId: string) {
+    const r = await this.rawFetch(
+      "DELETE",
+      `/budgets/${budget}/scheduled_transactions/${scheduledTransactionId}`,
+    );
+    const json: unknown = await r.json();
+    return ScheduledTransactionResponseSchema.parse(json).data.scheduled_transaction;
   }
 
   // --- Months ---

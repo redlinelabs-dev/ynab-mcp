@@ -78,4 +78,102 @@ describe("YnabClient", () => {
 
     await expect(client.listBudgets()).rejects.toThrow(/429/);
   });
+
+  it("GETs a single scheduled transaction by id", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: {
+        scheduled_transaction: {
+          id: "s1",
+          date_first: "2026-06-01",
+          date_next: "2026-07-01",
+          frequency: "monthly",
+          amount: -50000,
+        },
+      },
+    });
+    const client = new YnabClient("tok", fn);
+
+    const s = await client.getScheduledTransaction("bud-1", "s1");
+
+    expect(calls[0]?.method).toBe("GET");
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/scheduled_transactions/s1");
+    expect(s.id).toBe("s1");
+  });
+
+  it("POSTs a new scheduled transaction", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      data: {
+        scheduled_transaction: {
+          id: "s2",
+          date_first: "2026-07-01",
+          date_next: "2026-07-01",
+          frequency: "weekly",
+          amount: -10000,
+        },
+      },
+    });
+    const client = new YnabClient("tok", fn);
+
+    const s = await client.createScheduledTransaction("bud-1", {
+      account_id: "acct-1",
+      date: "2026-07-01",
+      amount: -10000,
+      frequency: "weekly",
+    });
+
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/scheduled_transactions");
+    expect(JSON.parse(calls[0]?.body ?? "null")).toEqual({
+      scheduled_transaction: {
+        account_id: "acct-1",
+        date: "2026-07-01",
+        amount: -10000,
+        frequency: "weekly",
+      },
+    });
+    expect(s.id).toBe("s2");
+  });
+
+  it("PUTs an update to a scheduled transaction", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: {
+        scheduled_transaction: {
+          id: "s3",
+          date_first: "2026-06-01",
+          date_next: "2026-07-01",
+          frequency: "monthly",
+          amount: -20000,
+        },
+      },
+    });
+    const client = new YnabClient("tok", fn);
+
+    await client.updateScheduledTransaction("bud-1", "s3", { amount: -20000 });
+
+    expect(calls[0]?.method).toBe("PUT");
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/scheduled_transactions/s3");
+    expect(JSON.parse(calls[0]?.body ?? "null")).toEqual({
+      scheduled_transaction: { amount: -20000 },
+    });
+  });
+
+  it("DELETEs a scheduled transaction", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: {
+        scheduled_transaction: {
+          id: "s4",
+          date_first: "2026-06-01",
+          date_next: "2026-07-01",
+          frequency: "monthly",
+          amount: -5000,
+        },
+      },
+    });
+    const client = new YnabClient("tok", fn);
+
+    await client.deleteScheduledTransaction("bud-1", "s4");
+
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/scheduled_transactions/s4");
+  });
 });

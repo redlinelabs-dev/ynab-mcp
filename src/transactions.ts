@@ -33,6 +33,29 @@ export function buildSaveTransaction(fields: SaveTxnFields): Record<string, unkn
   return out;
 }
 
+export interface SaveScheduledTxnFields {
+  account_id?: string;
+  date?: string;
+  amount?: number;
+  frequency?: string;
+  payee_id?: string | null;
+  payee_name?: string | null;
+  category_id?: string | null;
+  memo?: string | null;
+  flag_color?: string | null;
+}
+
+/** Build a save-scheduled-transaction object, omitting keys whose value is `undefined`. */
+export function buildSaveScheduledTransaction(
+  fields: SaveScheduledTxnFields,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
 /** Build the `{ transactions: [...] }` wrapper for the bulk PATCH endpoint. */
 export function buildBulkTransactionsBody(updates: BulkTxnUpdate[]): {
   transactions: Record<string, unknown>[];

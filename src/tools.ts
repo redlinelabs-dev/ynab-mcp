@@ -14,6 +14,7 @@ import type { YnabClient } from "./client.js";
 import type { DupTxn } from "./duplicates.js";
 import type { SummaryTxn } from "./summary.js";
 import type { ToolGroup } from "./toolsets.js";
+import type { SaveScheduledTxnFields } from "./transactions.js";
 
 import { findDuplicateTransactions } from "./duplicates.js";
 import {
@@ -127,6 +128,47 @@ const SpendingSummaryInput = BudgetArg.extend({
 
 const PayeeTxnsInput = PayeeRef.extend({ since_date: z.string().optional() });
 const CategoryTxnsInput = CategoryRef.extend({ since_date: z.string().optional() });
+
+const frequency = z.enum([
+  "never",
+  "daily",
+  "weekly",
+  "everyOtherWeek",
+  "twiceAMonth",
+  "every4Weeks",
+  "monthly",
+  "everyOtherMonth",
+  "every3Months",
+  "every4Months",
+  "twiceAYear",
+  "yearly",
+  "everyOtherYear",
+]);
+
+const ScheduledTxnRef = BudgetArg.extend({ scheduled_transaction_id: z.string() });
+
+const ScheduledOptionalShape = {
+  payee_id: z.string().optional(),
+  payee_name: z.string().optional(),
+  category_id: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+  flag_color: flagColor.nullable().optional(),
+};
+
+const CreateScheduledTxnInput = BudgetArg.extend({
+  account_id: z.string(),
+  date: z.string(),
+  amount: z.number(),
+  frequency,
+  ...ScheduledOptionalShape,
+});
+
+const UpdateScheduledTxnInput = ScheduledTxnRef.extend({
+  date: z.string().optional(),
+  amount: z.number().optional(),
+  frequency: frequency.optional(),
+  ...ScheduledOptionalShape,
+});
 
 // ---------------------------------------------------------------------------
 // Tool definitions (JSON schemas for the wire)
@@ -432,6 +474,114 @@ export const TOOLS: ToolDef[] = [
     description: "List scheduled (recurring/upcoming) transactions with next date and frequency.",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
   },
+  {
+    name: "get_scheduled_transaction",
+    group: "scheduled",
+    write: false,
+    description: "Get a single scheduled transaction by id.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, scheduled_transaction_id: { type: "string" } },
+      required: ["scheduled_transaction_id"],
+    },
+  },
+  {
+    name: "create_scheduled_transaction",
+    group: "scheduled",
+    write: true,
+    description:
+      "Create a scheduled (recurring) transaction. amount is milliunits (negative = outflow).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        account_id: { type: "string" },
+        date: { type: "string", description: "ISO date of the first occurrence." },
+        amount: { type: "number", description: "Milliunits; negative outflow, positive inflow." },
+        frequency: {
+          type: "string",
+          enum: [
+            "never",
+            "daily",
+            "weekly",
+            "everyOtherWeek",
+            "twiceAMonth",
+            "every4Weeks",
+            "monthly",
+            "everyOtherMonth",
+            "every3Months",
+            "every4Months",
+            "twiceAYear",
+            "yearly",
+            "everyOtherYear",
+          ],
+        },
+        payee_id: { type: "string" },
+        payee_name: { type: "string" },
+        category_id: { type: "string" },
+        memo: { type: "string" },
+        flag_color: {
+          type: "string",
+          enum: ["red", "orange", "yellow", "green", "blue", "purple"],
+        },
+      },
+      required: ["account_id", "date", "amount", "frequency"],
+    },
+  },
+  {
+    name: "update_scheduled_transaction",
+    group: "scheduled",
+    write: true,
+    description:
+      "Update fields on an existing scheduled transaction (only provided fields change).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        scheduled_transaction_id: { type: "string" },
+        date: { type: "string" },
+        amount: { type: "number", description: "Milliunits." },
+        frequency: {
+          type: "string",
+          enum: [
+            "never",
+            "daily",
+            "weekly",
+            "everyOtherWeek",
+            "twiceAMonth",
+            "every4Weeks",
+            "monthly",
+            "everyOtherMonth",
+            "every3Months",
+            "every4Months",
+            "twiceAYear",
+            "yearly",
+            "everyOtherYear",
+          ],
+        },
+        payee_id: { type: "string" },
+        payee_name: { type: "string" },
+        category_id: { type: "string" },
+        memo: { type: "string" },
+        flag_color: {
+          type: "string",
+          enum: ["red", "orange", "yellow", "green", "blue", "purple"],
+        },
+      },
+      required: ["scheduled_transaction_id"],
+    },
+  },
+  {
+    name: "delete_scheduled_transaction",
+    group: "scheduled",
+    write: true,
+    description: "Delete a scheduled transaction by id.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, scheduled_transaction_id: { type: "string" } },
+      required: ["scheduled_transaction_id"],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -646,6 +796,54 @@ export async function handleTool(
       const args = BudgetArg.parse(rawArgs);
       const scheduled = await client.listScheduledTransactions(budget(args));
       return json(scheduled.filter((s) => !s.deleted).map(formatScheduledTransaction));
+    }
+    case "get_scheduled_transaction": {
+      const args = ScheduledTxnRef.parse(rawArgs);
+      const s = await client.getScheduledTransaction(budget(args), args.scheduled_transaction_id);
+      return json(formatScheduledTransaction(s));
+    }
+    case "create_scheduled_transaction": {
+      const args = CreateScheduledTxnInput.parse(rawArgs);
+      const fields: SaveScheduledTxnFields = {
+        account_id: args.account_id,
+        date: args.date,
+        amount: args.amount,
+        frequency: args.frequency,
+        payee_id: args.payee_id,
+        payee_name: args.payee_name,
+        category_id: args.category_id,
+        memo: args.memo,
+        flag_color: args.flag_color,
+      };
+      const s = await client.createScheduledTransaction(budget(args), fields);
+      return json(formatScheduledTransaction(s));
+    }
+    case "update_scheduled_transaction": {
+      const args = UpdateScheduledTxnInput.parse(rawArgs);
+      const fields: SaveScheduledTxnFields = {
+        date: args.date,
+        amount: args.amount,
+        frequency: args.frequency,
+        payee_id: args.payee_id,
+        payee_name: args.payee_name,
+        category_id: args.category_id,
+        memo: args.memo,
+        flag_color: args.flag_color,
+      };
+      const s = await client.updateScheduledTransaction(
+        budget(args),
+        args.scheduled_transaction_id,
+        fields,
+      );
+      return json(formatScheduledTransaction(s));
+    }
+    case "delete_scheduled_transaction": {
+      const args = ScheduledTxnRef.parse(rawArgs);
+      const s = await client.deleteScheduledTransaction(
+        budget(args),
+        args.scheduled_transaction_id,
+      );
+      return json(formatScheduledTransaction(s));
     }
     default:
       throw new Error(`Unknown tool: ${name}`);
