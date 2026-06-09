@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/oauth-config.js";
 
-import { exchangeYnabCode } from "../src/ynab-oauth.js";
+import { exchangeYnabCode, refreshYnabToken } from "../src/ynab-oauth.js";
 
 const config: OAuthConfig = {
   authorizeEndpoint: "https://app.ynab.com/oauth/authorize",
@@ -63,5 +63,38 @@ describe("exchangeYnabCode", () => {
     const { fn } = fakeFetch(400, { error: "invalid_grant" });
 
     await expect(exchangeYnabCode("bad-code", config, fn)).rejects.toThrow(/400/);
+  });
+});
+
+describe("refreshYnabToken", () => {
+  it("returns accessToken, refreshToken, and expiresIn from the YNAB token response", async () => {
+    const { fn } = fakeFetch(200, tokenResponse);
+
+    const tokens = await refreshYnabToken("old-refresh-token", config, fn);
+
+    expect(tokens.accessToken).toBe("ynab-access-token");
+    expect(tokens.refreshToken).toBe("ynab-refresh-token");
+    expect(tokens.expiresIn).toBe(7200);
+  });
+
+  it("POSTs to the YNAB token endpoint with grant_type=refresh_token and the refresh token", async () => {
+    const { fn, calls } = fakeFetch(200, tokenResponse);
+
+    await refreshYnabToken("old-refresh-token", config, fn);
+
+    const call = calls[0];
+    expect(call?.url).toBe("https://app.ynab.com/oauth/token");
+    expect(call?.method).toBe("POST");
+    const params = new URLSearchParams(call?.body);
+    expect(params.get("grant_type")).toBe("refresh_token");
+    expect(params.get("refresh_token")).toBe("old-refresh-token");
+    expect(params.get("client_id")).toBe("test-client-id");
+    expect(params.get("client_secret")).toBe("test-client-secret");
+  });
+
+  it("throws a descriptive error when YNAB responds with non-2xx", async () => {
+    const { fn } = fakeFetch(401, { error: "invalid_token" });
+
+    await expect(refreshYnabToken("expired-token", config, fn)).rejects.toThrow(/401/);
   });
 });

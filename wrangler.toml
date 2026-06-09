@@ -10,6 +10,11 @@ bindings = [{ name = "YnabMCP", class_name = "YnabMCP" }]
 tag = "v1"
 new_sqlite_classes = ["YnabMCP"]
 
-# Required secret — set via:
-#   wrangler secret put YNAB_DEV_TOKEN
-# Never commit the token value.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "" # run: wrangler kv namespace create OAUTH_KV  →  paste the id here
+
+# Secrets — set via wrangler secret put <NAME>:
+#   YNAB_CLIENT_ID, YNAB_CLIENT_SECRET, YNAB_REDIRECT_URI, COOKIE_SECRET
+# Dev-only escape hatch (bypasses OAuth):
+#   YNAB_DEV_TOKEN
