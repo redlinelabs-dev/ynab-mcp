@@ -52,16 +52,24 @@ ENV
 ## 4. Pull access (GHCR)
 
 The image is published by `.github/workflows/docker-publish.yml` to
-`ghcr.io/redlinelabs-dev/ynab-mcp:latest` (plus `:vX.Y.Z` on tags). If the package is
-**private** (the default), authenticate the host once — or make the package public in
-the GitHub package settings:
+`ghcr.io/redlinelabs-dev/ynab-mcp:latest` (plus `:vX.Y.Z` on tags). **GHCR packages are
+private by default**, so a fresh host gets `unauthorized` on pull until you do one of:
+
+**A. Make the package public** (one-time; safe — the image holds no secrets, only
+compiled code that's already in the public repo, and all runtime secrets come from
+`.env`). Org package settings →
+`https://github.com/orgs/redlinelabs-dev/packages/container/ynab-mcp/settings` → Danger
+Zone → **Change visibility → Public**. After that any host pulls with no login.
+
+**B. Keep it private and authenticate the host.** Create a token with `read:packages`
+(<https://github.com/settings/tokens>), then — use `sudo` if you run `sudo docker`, so
+the credential lands in root's `~/.docker/config.json`:
 
 ```bash
-echo "$GHCR_PAT" | docker login ghcr.io -u <github-username> --password-stdin
+echo "$GHCR_PAT" | sudo docker login ghcr.io -u <github-username> --password-stdin
 ```
 
-`GHCR_PAT` is a GitHub token with `read:packages`. For reproducible deploys, pin a
-version: `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0`.
+For reproducible deploys, pin a version: `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0`.
 
 ## 5. Start it
 

@@ -107,8 +107,11 @@ docker compose up -d
 curl -s https://${TS_HOSTNAME}/health         # {"status":"ok"}
 ```
 
-If the GHCR package is private, `docker login ghcr.io` on the host first (or make the package public).
-Pin a version tag — `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0` — for reproducible deploys.
+GHCR packages are **private by default** (you'll get `unauthorized` on pull). Easiest fix: make the
+package public — Org → Packages → `ynab-mcp` → Package settings → **Change visibility → Public** (safe;
+the image has no secrets). Or keep it private and `sudo docker login ghcr.io -u <user>` on the host
+first. Details + exact URL in [docs/DEPLOY.md](docs/DEPLOY.md). Pin a version tag —
+`image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0` — for reproducible deploys.
 Prefer to build instead of pull, or use a reverse proxy instead of Tailscale? Both are in
 [docs/DEPLOY.md](docs/DEPLOY.md) (comments in `docker-compose.yml` cover the build option).
 
