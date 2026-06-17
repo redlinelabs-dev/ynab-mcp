@@ -8,7 +8,11 @@
 
 services:
   ynab-mcp:
-    build: .
+    # Builds the image straight from GitHub — no local clone needed. Pin the ref
+    # after '#': use a tag (e.g. #v0.1.0) for stable deploys, or #main for latest.
+    build: https://github.com/redlinelabs-dev/ynab-mcp.git#main
+    # For local development from a checkout, comment the line above and use:
+    # build: .
     image: ynab-mcp
     restart: unless-stopped
     env_file: .env

@@ -84,22 +84,33 @@ Reach it over Tailscale or your LAN. Full reference: **[docs/DEPLOY.md](docs/DEP
 
 OAuth needs HTTPS, so the server sits behind a stable HTTPS front (Tailscale `serve` is easiest).
 
+**No clone required** — the bundled `docker-compose.yml` builds the image straight from this GitHub
+repo (`build: https://github.com/redlinelabs-dev/ynab-mcp.git#main`). You only need that one file
+plus a `.env`:
+
 ```bash
-# 1. Get the code and a secret key for sealing tokens at rest
-git clone https://github.com/redlinelabs-dev/ynab-mcp.git && cd ynab-mcp
-openssl rand -base64 32          # copy this into ENCRYPTION_KEY below
+mkdir ynab-mcp && cd ynab-mcp
+
+# 1. Grab the compose file
+curl -O https://raw.githubusercontent.com/redlinelabs-dev/ynab-mcp/main/docker-compose.yml
 
 # 2. Create a YNAB OAuth app (YNAB > Account Settings > Developer Settings >
-#    New OAuth Application) and set its redirect URI to ${PUBLIC_URL}/callback.
+#    New OAuth Application); set its redirect URI to ${PUBLIC_URL}/callback.
 
-# 3. Configure
-cp .env.example .env
-#   edit .env → PUBLIC_URL, YNAB_CLIENT_ID, YNAB_CLIENT_SECRET, ENCRYPTION_KEY
+# 3. Write .env  (generate the key with: openssl rand -base64 32)
+cat > .env <<'ENV'
+PUBLIC_URL=https://ynab.your-tailnet.ts.net
+YNAB_CLIENT_ID=your-ynab-oauth-client-id
+YNAB_CLIENT_SECRET=your-ynab-oauth-client-secret
+ENCRYPTION_KEY=base64-of-32-random-bytes
+ENV
 
-# 4. Run (builds the image from the included Dockerfile)
+# 4. Build (from GitHub) + run
 docker compose up -d
 curl http://localhost:8080/health        # {"status":"ok"}
 ```
+
+> Cloning the repo and using `build: .` instead works too — see the comment in `docker-compose.yml`.
 
 Then put HTTPS in front and set `PUBLIC_URL` to it. With Tailscale:
 

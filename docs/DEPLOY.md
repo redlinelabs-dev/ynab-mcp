@@ -28,14 +28,26 @@ In YNAB → Account Settings → Developer Settings → New OAuth Application. S
 
 ## 3. Configure `.env`
 
+From a clone, `cp .env.example .env`. Or, **without cloning**, write the four required keys directly
+(the bundled `docker-compose.yml` builds the image from GitHub, so you only need the compose file and
+this `.env`):
+
 ```bash
-cp .env.example .env
-# Fill in: PUBLIC_URL, YNAB_CLIENT_ID, YNAB_CLIENT_SECRET, ENCRYPTION_KEY
+cat > .env <<'ENV'
+PUBLIC_URL=https://ynab.your-tailnet.ts.net
+YNAB_CLIENT_ID=your-ynab-oauth-client-id
+YNAB_CLIENT_SECRET=your-ynab-oauth-client-secret
+ENCRYPTION_KEY=base64-of-32-random-bytes
+ENV
 ```
 
 `PUBLIC_URL` is the external HTTPS URL clients reach (see step 5 for Tailscale).
 
 ## 4. Start it
+
+The bundled compose file builds the image straight from this repo
+(`build: https://github.com/redlinelabs-dev/ynab-mcp.git#main`) — no clone needed. Pin a tag
+(e.g. `#v0.1.0`) for a stable deploy, or comment that line and use `build: .` from a checkout.
 
 ```bash
 docker compose up -d
