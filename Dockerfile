@@ -17,7 +17,9 @@ RUN npm run build
 FROM node:24-slim AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# --ignore-scripts: runtime deps need no install scripts, and it skips the
+# `prepare` hook (husky) which is a devDependency absent under --omit=dev.
+RUN npm ci --omit=dev --ignore-scripts
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production
