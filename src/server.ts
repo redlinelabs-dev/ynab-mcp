@@ -6,7 +6,10 @@
 
 import "dotenv/config";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import {
+  getOAuthProtectedResourceMetadataUrl,
+  mcpAuthRouter,
+} from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import { z } from "zod";
@@ -64,9 +67,25 @@ async function main(): Promise<void> {
 
   const app = express();
 
+  // The MCP endpoint is the OAuth protected resource (RFC 9728). Advertising it as
+  // `${PUBLIC_URL}/mcp` makes the SDK serve protected-resource metadata at
+  // /.well-known/oauth-protected-resource/mcp, which clients (Claude Desktop, etc.)
+  // discover to start the OAuth flow.
+  const issuerUrl = new URL(publicUrl);
+  const resourceServerUrl = new URL("/mcp", publicUrl);
+  const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resourceServerUrl);
+
   // OAuth server endpoints to MCP clients: /authorize, /token, /register, /revoke,
   // and the .well-known metadata. Must be mounted at the application root.
-  app.use(mcpAuthRouter({ provider, issuerUrl: new URL(publicUrl) }));
+  app.use(
+    mcpAuthRouter({
+      provider,
+      issuerUrl,
+      resourceServerUrl,
+      resourceName: "YNAB MCP",
+      scopesSupported: ["ynab.read", "ynab.write"],
+    }),
+  );
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
@@ -104,11 +123,16 @@ async function main(): Promise<void> {
   });
 
   // The authenticated MCP endpoint (stateless Streamable HTTP, one transport per request).
-  app.all("/mcp", requireBearerAuth({ verifier: provider }), express.json(), (req, res) => {
-    handleMcp(provider, store, encKey, config, req, res).catch((err: unknown) => {
-      if (!res.headersSent) res.status(500).json({ error: errorText(err) });
-    });
-  });
+  app.all(
+    "/mcp",
+    requireBearerAuth({ verifier: provider, resourceMetadataUrl }),
+    express.json(),
+    (req, res) => {
+      handleMcp(provider, store, encKey, config, req, res).catch((err: unknown) => {
+        if (!res.headersSent) res.status(500).json({ error: errorText(err) });
+      });
+    },
+  );
 
   app.listen(port, () => {
     console.error(`YNAB MCP server listening on :${port} (public: ${publicUrl})`);
