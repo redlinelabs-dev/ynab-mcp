@@ -82,47 +82,37 @@ can reach it logs in with **their own** YNAB account (browser OAuth) and gets th
 read-only-by-default data — connect once and it stays connected (YNAB refresh tokens don't expire).
 Reach it over Tailscale or your LAN. Full reference: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
-OAuth needs HTTPS, so the server sits behind a stable HTTPS front (Tailscale `serve` is easiest).
-
-**No clone required** — the bundled `docker-compose.yml` builds the image straight from this GitHub
-repo (`build: https://github.com/redlinelabs-dev/ynab-mcp.git#main`). You only need that one file
-plus a `.env`:
+OAuth needs HTTPS, so the server sits behind a stable HTTPS front. The bundled `docker-compose.yml`
+runs the **prebuilt GHCR image** (`ghcr.io/redlinelabs-dev/ynab-mcp`) behind a **Tailscale sidecar**
+that terminates HTTPS and serves it at `https://${TS_HOSTNAME}` — no reverse proxy, no clone. Give the
+app its own directory holding just `docker-compose.yml` + `.env`:
 
 ```bash
 mkdir ynab-mcp && cd ynab-mcp
-
-# 1. Grab the compose file
 curl -O https://raw.githubusercontent.com/redlinelabs-dev/ynab-mcp/main/docker-compose.yml
 
-# 2. Create a YNAB OAuth app (YNAB > Account Settings > Developer Settings >
-#    New OAuth Application); set its redirect URI to ${PUBLIC_URL}/callback.
+# YNAB OAuth app: Account Settings > Developer Settings > New OAuth Application,
+# redirect URI = https://<TS_HOSTNAME>/callback   (e.g. https://ynab.your-tailnet.ts.net/callback)
 
-# 3. Write .env  (generate the key with: openssl rand -base64 32)
 cat > .env <<'ENV'
-PUBLIC_URL=https://ynab.your-tailnet.ts.net
+TS_HOSTNAME=ynab.your-tailnet.ts.net
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
 YNAB_CLIENT_ID=your-ynab-oauth-client-id
 YNAB_CLIENT_SECRET=your-ynab-oauth-client-secret
-ENCRYPTION_KEY=base64-of-32-random-bytes
+ENCRYPTION_KEY=base64-of-32-random-bytes      # openssl rand -base64 32
+DATA_DIR=/mnt/HomeServer/Apps/ynab-mcp
 ENV
 
-# 4. Build (from GitHub) + run
 docker compose up -d
-curl http://localhost:8080/health        # {"status":"ok"}
+curl -s https://${TS_HOSTNAME}/health         # {"status":"ok"}
 ```
 
-> Cloning the repo and using `build: .` instead works too — see the comment in `docker-compose.yml`.
+If the GHCR package is private, `docker login ghcr.io` on the host first (or make the package public).
+Pin a version tag — `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0` — for reproducible deploys.
+Prefer to build instead of pull, or use a reverse proxy instead of Tailscale? Both are in
+[docs/DEPLOY.md](docs/DEPLOY.md) (comments in `docker-compose.yml` cover the build option).
 
-Then put HTTPS in front and set `PUBLIC_URL` to it. With Tailscale:
-
-```bash
-# on the Docker host (or the optional sidecar in docker-compose.yml)
-tailscale serve --bg --https=443 http://127.0.0.1:8080
-#   → https://<host>.<tailnet>.ts.net   (use this as PUBLIC_URL, then: docker compose up -d)
-```
-
-Finally, add `${PUBLIC_URL}/mcp` as a remote MCP server in your client (e.g. its dashboard). A
-reverse-proxy (Caddy) alternative and backup/key-rotation notes are in
-[docs/DEPLOY.md](docs/DEPLOY.md). Requires Docker, or Node ≥ 24 for a bare `npm run build && npm start`.
+Finally, add `https://${TS_HOSTNAME}/mcp` as a remote MCP server in your client (e.g. its dashboard).
 
 ## Setup (local stdio server)
 

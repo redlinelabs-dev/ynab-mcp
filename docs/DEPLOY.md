@@ -1,12 +1,14 @@
 # Deploying the YNAB MCP server (self-hosted)
 
-This is the remote, multi-tenant OAuth server (ADR-0004) as a Docker container you
-run on your own hardware. Anyone who can reach it logs in with **their own** YNAB
-account and gets their own isolated, read-only-by-default grant. "Private" means
-_you control the network exposure_ (Tailscale or LAN) — not that auth is removed.
+This is the remote, multi-tenant OAuth server (ADR-0004): a Docker container you run
+on your own hardware. Anyone who can reach it logs in with **their own** YNAB account
+and gets their own isolated, read-only-by-default grant. "Private" means _you control
+the network exposure_ — not that auth is removed.
 
-OAuth and YNAB's redirect URI both require **HTTPS**, so the server must sit behind
-a stable HTTPS front. The easiest is Tailscale `serve`; a reverse proxy works too.
+The preferred deploy is the bundled `docker-compose.yml`: the prebuilt GHCR image
+(`ghcr.io/redlinelabs-dev/ynab-mcp`) behind a **Tailscale sidecar** that terminates
+HTTPS (which OAuth requires) and serves it at `https://${TS_HOSTNAME}`. One directory
+per app, holding `docker-compose.yml` + `.env`.
 
 ## 1. Generate an encryption key
 
@@ -19,89 +21,86 @@ openssl rand -base64 32
 
 ## 2. Create a YNAB OAuth application
 
-In YNAB → Account Settings → Developer Settings → New OAuth Application. Set the
-**redirect URI** to `${PUBLIC_URL}/callback` (e.g.
+YNAB → Account Settings → Developer Settings → New OAuth Application. Set the
+**redirect URI** to `https://${TS_HOSTNAME}/callback` (e.g.
 `https://ynab.your-tailnet.ts.net/callback`). Note the client id and secret.
 
 > New OAuth apps run in **Restricted Mode** (max 25 users) until YNAB reviews them
 > (~2–4 weeks). Fine for personal/small use.
 
-## 3. Configure `.env`
-
-From a clone, `cp .env.example .env`. Or, **without cloning**, write the four required keys directly
-(the bundled `docker-compose.yml` builds the image from GitHub, so you only need the compose file and
-this `.env`):
+## 3. Set up the directory
 
 ```bash
+mkdir ynab-mcp && cd ynab-mcp
+curl -O https://raw.githubusercontent.com/redlinelabs-dev/ynab-mcp/main/docker-compose.yml
+
 cat > .env <<'ENV'
-PUBLIC_URL=https://ynab.your-tailnet.ts.net
+TS_HOSTNAME=ynab.your-tailnet.ts.net
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
 YNAB_CLIENT_ID=your-ynab-oauth-client-id
 YNAB_CLIENT_SECRET=your-ynab-oauth-client-secret
 ENCRYPTION_KEY=base64-of-32-random-bytes
+DATA_DIR=/mnt/HomeServer/Apps/ynab-mcp
 ENV
 ```
 
-`PUBLIC_URL` is the external HTTPS URL clients reach (see step 5 for Tailscale).
+- `TS_HOSTNAME` must match the `hostname:` in the compose (`ynab`) + your tailnet.
+- `TS_AUTHKEY` — https://login.tailscale.com/admin/settings/keys.
+- `DATA_DIR` — host dir for the SQLite db (`${DATA_DIR}/data`) and tailscale state
+  (`${DATA_DIR}/tailscale`); both are bind-mounted.
 
-## 4. Start it
+## 4. Pull access (GHCR)
 
-The bundled compose file builds the image straight from this repo
-(`build: https://github.com/redlinelabs-dev/ynab-mcp.git#main`) — no clone needed. Pin a tag
-(e.g. `#v0.1.0`) for a stable deploy, or comment that line and use `build: .` from a checkout.
+The image is published by `.github/workflows/docker-publish.yml` to
+`ghcr.io/redlinelabs-dev/ynab-mcp:latest` (plus `:vX.Y.Z` on tags). If the package is
+**private** (the default), authenticate the host once — or make the package public in
+the GitHub package settings:
+
+```bash
+echo "$GHCR_PAT" | docker login ghcr.io -u <github-username> --password-stdin
+```
+
+`GHCR_PAT` is a GitHub token with `read:packages`. For reproducible deploys, pin a
+version: `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0`.
+
+## 5. Start it
 
 ```bash
 docker compose up -d
-docker compose logs -f ynab-mcp     # "listening on :8080"
-curl http://localhost:8080/health   # {"status":"ok"}
+docker compose logs -f tailscale-ynab    # waits healthy, then ynab-mcp starts
+curl -s https://${TS_HOSTNAME}/health     # {"status":"ok"}
 ```
 
-The SQLite database persists in the `ynab-mcp-data` volume.
-
-## 5. Put HTTPS in front
-
-### Option A — Tailscale `serve` (recommended)
-
-Get a stable `https://<host>.<tailnet>.ts.net` name with automatic certs, reachable
-only on your tailnet.
-
-- **Sidecar:** uncomment the `tailscale` service in `docker-compose.yml`, set
-  `TS_AUTHKEY` in `.env`, `docker compose up -d`, then:
-  ```bash
-  docker compose exec tailscale tailscale serve --bg --https=443 http://127.0.0.1:8080
-  ```
-- **Host Tailscale:** if the Docker host is already on your tailnet:
-  ```bash
-  tailscale serve --bg --https=443 http://127.0.0.1:8080
-  ```
-
-Then set `PUBLIC_URL=https://<host>.<tailnet>.ts.net` in `.env`, register
-`${PUBLIC_URL}/callback` with YNAB (step 2), and `docker compose up -d` to restart.
-
-### Option B — Reverse proxy (Caddy)
-
-For a LAN/public domain with your own TLS:
-
-```caddy
-ynab.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
-Set `PUBLIC_URL=https://ynab.example.com` and register its `/callback`.
+The Tailscale sidecar joins your tailnet as `ynab` and serves HTTPS at
+`https://${TS_HOSTNAME}` via the inline `serve` config (proxying to the app on
+`127.0.0.1:8080`). The app shares the sidecar's network namespace
+(`network_mode: service:tailscale-ynab`) and starts once the sidecar is healthy.
 
 ## 6. Connect an MCP client
 
-Add `${PUBLIC_URL}/mcp` as a remote MCP server (e.g. in hermes-agent's dashboard).
-The client runs the OAuth flow, you pick read-only or write access on the consent
-screen, log into YNAB once, and the connection persists — the server refreshes the
-YNAB token transparently (YNAB refresh tokens do not expire until revoked).
+Add `https://${TS_HOSTNAME}/mcp` as a remote MCP server (e.g. in your client's
+dashboard, or `claude mcp add --transport http ynab https://${TS_HOSTNAME}/mcp`). The
+client runs the OAuth flow, you pick read-only or write on the consent screen, log into
+YNAB once, and the connection persists — the server refreshes the YNAB token
+transparently (YNAB refresh tokens do not expire until revoked).
 
-## Running without Docker
+## Alternatives
 
-`npm run build && npm start` (env from your shell or a `.env`). Node ≥ 24 required
-(`node:sqlite` is built in). Still needs an HTTPS front for OAuth.
+- **Build instead of pull** — in `docker-compose.yml`, replace the `image:` line with
+  `build: https://github.com/redlinelabs-dev/ynab-mcp.git#main` (from GitHub; pin a tag
+  or commit SHA for integrity) or `build: .` (from a checkout).
+- **Reverse proxy instead of Tailscale** — drop the `tailscale-ynab` service and the
+  `network_mode`/`depends_on` lines, add `ports: ["8080:8080"]` to `ynab-mcp`, set
+  `PUBLIC_URL` in `.env`, and front it with e.g. Caddy:
+  ```caddy
+  ynab.example.com {
+      reverse_proxy 127.0.0.1:8080
+  }
+  ```
+- **No Docker** — `npm run build && npm start` on Node ≥ 24 (`node:sqlite` is built in),
+  env from your shell or `.env`. Still needs an HTTPS front for OAuth.
 
 ## Backups & key rotation
 
-- Back up the `ynab-mcp-data` volume (the SQLite file) and your `ENCRYPTION_KEY`.
+- Back up `${DATA_DIR}` (the SQLite db) and your `ENCRYPTION_KEY`.
 - Rotating `ENCRYPTION_KEY` invalidates sealed tokens; users simply re-authenticate.
