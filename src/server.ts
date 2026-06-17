@@ -66,6 +66,10 @@ async function main(): Promise<void> {
   });
 
   const app = express();
+  // Behind the Tailscale `serve` (or a reverse proxy) on loopback, so trust the
+  // X-Forwarded-* headers from 127.0.0.1 — needed for express-rate-limit to read
+  // the client IP instead of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+  app.set("trust proxy", "loopback");
 
   // The MCP endpoint is the OAuth protected resource (RFC 9728). Advertising it as
   // `${PUBLIC_URL}/mcp` makes the SDK serve protected-resource metadata at
