@@ -112,7 +112,45 @@ Pin a version tag — `image: ghcr.io/redlinelabs-dev/ynab-mcp:v0.1.0` — for r
 Prefer to build instead of pull, or use a reverse proxy instead of Tailscale? Both are in
 [docs/DEPLOY.md](docs/DEPLOY.md) (comments in `docker-compose.yml` cover the build option).
 
-Finally, add `https://${TS_HOSTNAME}/mcp` as a remote MCP server in your client (e.g. its dashboard).
+### Connect a client to your deployed server
+
+Once it's up at `https://${TS_HOSTNAME}`, point any MCP client that supports **remote servers with
+OAuth** at `https://${TS_HOSTNAME}/mcp`. There's nothing to configure beyond the URL — the server
+supports dynamic client registration, so the client registers itself and you log in through the
+browser (YNAB), choosing read-only or write on the consent screen. The connection then persists.
+
+> The client machine must be able to reach `${TS_HOSTNAME}` — for a Tailscale deploy that means it's
+> signed into the same tailnet. HTTPS is required (the deploy provides it).
+
+**Claude Code**
+
+```bash
+claude mcp add --transport http ynab https://ynab.your-tailnet.ts.net/mcp
+#   add  -s user  to make it available in every project (default: current project)
+```
+
+Then, in a session, run `/mcp` → **Authenticate** to do the browser OAuth login. Re-run `/mcp`
+anytime to check status or re-authenticate.
+
+**Claude Desktop**
+
+Settings → **Connectors** → **Add custom connector**, name it `YNAB`, and enter the URL
+`https://ynab.your-tailnet.ts.net/mcp`. Claude Desktop walks you through the OAuth login and the YNAB
+tools appear once connected. (Needs a Claude Desktop version with custom-connector / remote-MCP
+support.)
+
+**Other clients** (Cursor, VS Code, hermes-agent, …)
+
+Anything that speaks **remote / Streamable HTTP MCP** connects the same way — give it the URL and
+complete the browser prompt. For clients configured by JSON, it's usually:
+
+```json
+{
+  "mcpServers": {
+    "ynab": { "type": "http", "url": "https://ynab.your-tailnet.ts.net/mcp" }
+  }
+}
+```
 
 ## Setup (local stdio server)
 
