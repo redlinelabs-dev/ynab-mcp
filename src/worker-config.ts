@@ -16,11 +16,11 @@ export interface OAuthProps {
   readOnly: boolean;
 }
 
-const OAuthPropsSchema = z.object({
+export const OAuthPropsSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
   expiresAt: z.number(),
-  readOnly: z.boolean().default(true), // old stored tokens default to read-only (safe)
+  readOnly: z.boolean().default(true), // props missing the flag default to read-only (safe)
 });
 
 export async function getOrRefreshToken(
@@ -56,31 +56,6 @@ export async function makeToolContextFromProps(
     defaultBudget: "last-used",
   };
   return { ctx, refreshed };
-}
-
-export interface OAuthStorage {
-  get(key: string): Promise<unknown>;
-  put(key: string, value: unknown): Promise<void>;
-}
-
-const OAUTH_PROPS_KEY = "oauth_props";
-
-export async function initFromStorage(
-  storage: OAuthStorage,
-  config: OAuthConfig,
-  fetchFn: FetchFn,
-  nowMs: number,
-): Promise<{ ctx: ToolContext; refreshed: OAuthProps | null }> {
-  const raw = await storage.get(OAUTH_PROPS_KEY);
-  if (!raw) {
-    throw new Error("No OAuth props found in storage — user must complete OAuth login first");
-  }
-  const props = OAuthPropsSchema.parse(raw);
-  const result = await makeToolContextFromProps(props, config, fetchFn, nowMs);
-  if (result.refreshed) {
-    await storage.put(OAUTH_PROPS_KEY, result.refreshed);
-  }
-  return result;
 }
 
 export function makeToolContext(devToken: string | undefined | null): ToolContext {

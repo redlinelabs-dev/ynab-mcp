@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/oauth-config.js";
-import type { OAuthStorage } from "../src/worker-config.js";
 
 import { YnabClient } from "../src/client.js";
 import {
   getOrRefreshToken,
-  initFromStorage,
   makeToolContext,
   makeToolContextFromProps,
 } from "../src/worker-config.js";
-import { kvStorage, parseScope } from "../src/worker-helpers.js";
 
 const oauthConfig: OAuthConfig = {
   authorizeEndpoint: "https://app.ynab.com/oauth/authorize",
@@ -145,125 +142,5 @@ describe("makeToolContextFromProps", () => {
 
     expect(ctx.client).toBeInstanceOf(YnabClient);
     expect(refreshed?.accessToken).toBe("new-access-token");
-  });
-});
-
-describe("initFromStorage", () => {
-  it("returns a ToolContext from stored OAuth props when token is not expired", async () => {
-    const storedProps = {
-      accessToken: "stored-token",
-      refreshToken: "stored-rt",
-      expiresAt: 9999999999999,
-    };
-    const storage: OAuthStorage = {
-      get: async (_key) => storedProps,
-      put: async (_key, _val) => {},
-    };
-    const { fn } = fakeFetch(200, freshTokenResponse);
-
-    const { ctx, refreshed } = await initFromStorage(storage, oauthConfig, fn, 1000000000000);
-
-    expect(ctx.client).toBeInstanceOf(YnabClient);
-    expect(ctx.readOnly).toBe(true);
-    expect(refreshed).toBeNull();
-  });
-
-  it("refreshes and persists new props when stored token is expired", async () => {
-    const nowMs = 1000000000000;
-    const storedProps = {
-      accessToken: "old-token",
-      refreshToken: "old-rt",
-      expiresAt: nowMs - 1,
-      readOnly: true,
-    };
-    const puts: Array<{ key: string; val: unknown }> = [];
-    const storage: OAuthStorage = {
-      get: async (_key) => storedProps,
-      put: async (key, val) => {
-        puts.push({ key, val });
-      },
-    };
-    const { fn } = fakeFetch(200, freshTokenResponse);
-
-    const { ctx, refreshed } = await initFromStorage(storage, oauthConfig, fn, nowMs);
-
-    expect(ctx.client).toBeInstanceOf(YnabClient);
-    expect(refreshed?.accessToken).toBe("new-access-token");
-    expect(puts).toHaveLength(1);
-    expect(puts[0]?.key).toBe("oauth_props");
-  });
-
-  it("creates a non-read-only context when stored props have readOnly=false", async () => {
-    const storedProps = {
-      accessToken: "write-token",
-      refreshToken: "write-rt",
-      expiresAt: 9999999999999,
-      readOnly: false,
-    };
-    const storage: OAuthStorage = {
-      get: async (_key) => storedProps,
-      put: async (_key, _val) => {},
-    };
-    const { fn } = fakeFetch(200, freshTokenResponse);
-
-    const { ctx } = await initFromStorage(storage, oauthConfig, fn, 1000000000000);
-
-    expect(ctx.readOnly).toBe(false);
-  });
-
-  it("throws a descriptive error when no OAuth props are stored", async () => {
-    const storage: OAuthStorage = { get: async (_key) => undefined, put: async (_key, _val) => {} };
-    const { fn } = fakeFetch(200, freshTokenResponse);
-
-    await expect(initFromStorage(storage, oauthConfig, fn, 1000000000000)).rejects.toThrow(
-      /oauth/i,
-    );
-  });
-});
-
-describe("parseScope", () => {
-  it("returns 'full' when the scope param is 'write'", () => {
-    const params = new URLSearchParams("scope=write");
-    expect(parseScope(params)).toBe("full");
-  });
-
-  it("returns 'read-only' for any value other than 'write'", () => {
-    expect(parseScope(new URLSearchParams("scope=read-only"))).toBe("read-only");
-    expect(parseScope(new URLSearchParams(""))).toBe("read-only");
-    expect(parseScope(new URLSearchParams("scope=WRITE"))).toBe("read-only");
-  });
-});
-
-describe("kvStorage", () => {
-  it("calls kv.put with JSON.stringify of the value", async () => {
-    const puts: Array<{ key: string; value: string }> = [];
-    const fakeKV = {
-      get: (_key: string, _type: "json") => Promise.resolve(null),
-      put: (key: string, value: string) => {
-        puts.push({ key, value });
-        return Promise.resolve();
-      },
-    };
-    const storage = kvStorage(fakeKV);
-    const props = { accessToken: "tok", refreshToken: "rt", expiresAt: 123, readOnly: true };
-
-    await storage.put("oauth_props", props);
-
-    expect(puts).toHaveLength(1);
-    expect(puts[0]?.key).toBe("oauth_props");
-    expect(puts[0]?.value).toBe(JSON.stringify(props));
-  });
-
-  it("returns whatever kv.get returns (json-parsed value from KV)", async () => {
-    const stored = { accessToken: "tok", refreshToken: "rt", expiresAt: 999, readOnly: false };
-    const fakeKV = {
-      get: (_key: string, _type: "json") => Promise.resolve(stored),
-      put: (_key: string, _value: string) => Promise.resolve(),
-    };
-    const storage = kvStorage(fakeKV);
-
-    const result = await storage.get("oauth_props");
-
-    expect(result).toBe(stored);
   });
 });

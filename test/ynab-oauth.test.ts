@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OAuthConfig } from "../src/oauth-config.js";
 
-import { exchangeYnabCode, refreshYnabToken } from "../src/ynab-oauth.js";
+import { exchangeYnabCode, fetchYnabUserId, refreshYnabToken } from "../src/ynab-oauth.js";
 
 const config: OAuthConfig = {
   authorizeEndpoint: "https://app.ynab.com/oauth/authorize",
@@ -63,6 +63,55 @@ describe("exchangeYnabCode", () => {
     const { fn } = fakeFetch(400, { error: "invalid_grant" });
 
     await expect(exchangeYnabCode("bad-code", config, fn)).rejects.toThrow(/400/);
+  });
+
+  it("includes code_verifier when a PKCE verifier is supplied", async () => {
+    const { fn, calls } = fakeFetch(200, tokenResponse);
+
+    await exchangeYnabCode("auth-code-123", config, fn, "the-pkce-verifier");
+
+    const params = new URLSearchParams(calls[0]?.body);
+    expect(params.get("code_verifier")).toBe("the-pkce-verifier");
+  });
+
+  it("omits code_verifier when no PKCE verifier is supplied", async () => {
+    const { fn, calls } = fakeFetch(200, tokenResponse);
+
+    await exchangeYnabCode("auth-code-123", config, fn);
+
+    const params = new URLSearchParams(calls[0]?.body);
+    expect(params.has("code_verifier")).toBe(false);
+  });
+});
+
+describe("fetchYnabUserId", () => {
+  it("returns the user id from the YNAB /user response", async () => {
+    const { fn } = fakeFetch(200, { data: { user: { id: "user-abc-123" } } });
+
+    const id = await fetchYnabUserId("access-token", fn);
+
+    expect(id).toBe("user-abc-123");
+  });
+
+  it("sends the access token as a Bearer Authorization header", async () => {
+    const headers: string[] = [];
+    const fn: typeof fetch = (input, init) => {
+      const req = new Request(input, init);
+      headers.push(req.headers.get("authorization") ?? "");
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { user: { id: "u1" } } }), { status: 200 }),
+      );
+    };
+
+    await fetchYnabUserId("my-access-token", fn);
+
+    expect(headers[0]).toBe("Bearer my-access-token");
+  });
+
+  it("throws a descriptive error when YNAB responds with non-2xx", async () => {
+    const { fn } = fakeFetch(401, { error: "unauthorized" });
+
+    await expect(fetchYnabUserId("bad-token", fn)).rejects.toThrow(/401/);
   });
 });
 

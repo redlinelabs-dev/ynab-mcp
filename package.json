@@ -1,22 +1,18 @@
 {
   "name": "@redlinelabs/ynab-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for YNAB (You Need A Budget) — budgets, accounts, categories, transactions, and more",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/redlinelabs-dev/ynab-mcp.git"
   },
-  "bin": {
-    "ynab-mcp": "dist/index.js"
-  },
-  "files": [
-    "dist"
-  ],
   "type": "module",
   "scripts": {
     "build": "rm -rf dist && tsgo",
-    "start": "node dist/index.js",
+    "start": "node dist/server.js",
+    "start:stdio": "node dist/index.js",
     "dev": "tsgo --watch",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -30,13 +26,14 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
-    "agents": "^0.14.3",
     "dotenv": "^17.3.1",
+    "express": "^5.2.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
+    "@types/express": "^5.0.6",
     "@types/node": "latest",
     "@typescript/native-preview": "latest",
     "husky": "^9.1.7",

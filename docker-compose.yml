@@ -1,0 +1,43 @@
+# Self-hosted YNAB MCP server. See docs/DEPLOY.md for the full walkthrough.
+#
+#   1. cp .env.example .env  and fill in PUBLIC_URL, YNAB_CLIENT_ID/SECRET, ENCRYPTION_KEY
+#   2. docker compose up -d
+#
+# Put an HTTPS front in front of this (Tailscale `serve` or a reverse proxy) so
+# PUBLIC_URL resolves to https — OAuth and YNAB's redirect URI require it.
+
+services:
+  ynab-mcp:
+    build: .
+    image: ynab-mcp
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ynab-mcp-data:/app/data
+
+  # ── Optional Tailscale sidecar ────────────────────────────────────────────
+  # Uncomment to expose the app on your tailnet over HTTPS without a reverse
+  # proxy. Create an auth key at https://login.tailscale.com/admin/settings/keys
+  # and set TS_AUTHKEY in .env. After it joins, run inside the sidecar:
+  #   tailscale serve --bg --https=443 http://127.0.0.1:8080
+  # then set PUBLIC_URL to https://<machine>.<tailnet>.ts.net in .env.
+  #
+  # tailscale:
+  #   image: tailscale/tailscale:latest
+  #   hostname: ynab-mcp
+  #   environment:
+  #     - TS_AUTHKEY=${TS_AUTHKEY}
+  #     - TS_STATE_DIR=/var/lib/tailscale
+  #     - TS_EXTRA_ARGS=--accept-routes
+  #   volumes:
+  #     - tailscale-state:/var/lib/tailscale
+  #   cap_add:
+  #     - net_admin
+  #   network_mode: service:ynab-mcp   # share the app's network namespace
+  #   restart: unless-stopped
+
+volumes:
+  ynab-mcp-data:
+  # tailscale-state:

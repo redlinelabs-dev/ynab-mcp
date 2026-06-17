@@ -1,7 +1,7 @@
 import { requireEnv } from "./env.js";
 
-const YNAB_AUTHORIZE_ENDPOINT = "https://app.ynab.com/oauth/authorize";
-const YNAB_TOKEN_ENDPOINT = "https://app.ynab.com/oauth/token";
+export const YNAB_AUTHORIZE_ENDPOINT = "https://app.ynab.com/oauth/authorize";
+export const YNAB_TOKEN_ENDPOINT = "https://app.ynab.com/oauth/token";
 
 interface OAuthEnv {
   YNAB_CLIENT_ID: string;

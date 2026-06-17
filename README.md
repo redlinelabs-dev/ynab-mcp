@@ -75,7 +75,48 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 | ------------- | ------------------ |
 | `list_payees` | Payees in a budget |
 
-## Setup
+## Self-hosting the remote server (Docker)
+
+The **primary** way to run this: a remote, multi-tenant OAuth server you host yourself. Anyone who
+can reach it logs in with **their own** YNAB account (browser OAuth) and gets their own isolated,
+read-only-by-default data — connect once and it stays connected (YNAB refresh tokens don't expire).
+Reach it over Tailscale or your LAN. Full reference: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+OAuth needs HTTPS, so the server sits behind a stable HTTPS front (Tailscale `serve` is easiest).
+
+```bash
+# 1. Get the code and a secret key for sealing tokens at rest
+git clone https://github.com/redlinelabs-dev/ynab-mcp.git && cd ynab-mcp
+openssl rand -base64 32          # copy this into ENCRYPTION_KEY below
+
+# 2. Create a YNAB OAuth app (YNAB > Account Settings > Developer Settings >
+#    New OAuth Application) and set its redirect URI to ${PUBLIC_URL}/callback.
+
+# 3. Configure
+cp .env.example .env
+#   edit .env → PUBLIC_URL, YNAB_CLIENT_ID, YNAB_CLIENT_SECRET, ENCRYPTION_KEY
+
+# 4. Run (builds the image from the included Dockerfile)
+docker compose up -d
+curl http://localhost:8080/health        # {"status":"ok"}
+```
+
+Then put HTTPS in front and set `PUBLIC_URL` to it. With Tailscale:
+
+```bash
+# on the Docker host (or the optional sidecar in docker-compose.yml)
+tailscale serve --bg --https=443 http://127.0.0.1:8080
+#   → https://<host>.<tailnet>.ts.net   (use this as PUBLIC_URL, then: docker compose up -d)
+```
+
+Finally, add `${PUBLIC_URL}/mcp` as a remote MCP server in your client (e.g. its dashboard). A
+reverse-proxy (Caddy) alternative and backup/key-rotation notes are in
+[docs/DEPLOY.md](docs/DEPLOY.md). Requires Docker, or Node ≥ 24 for a bare `npm run build && npm start`.
+
+## Setup (local stdio server)
+
+This runs the server locally over stdio with a Personal Access Token — for single-user/dev use, or
+clients that launch the process directly. (The remote Docker server above is the multi-user path.)
 
 ### 1. Create a YNAB Personal Access Token
 
@@ -96,13 +137,21 @@ YNAB_BUDGET_ID=last-used
 - `YNAB_TOOLSETS` — optional comma-separated [toolsets](#toolsets) to expose (default: all)
 - `YNAB_READ_ONLY` — optional; set to `true` to expose only read tools
 
+> **Two ways to run this.** The instructions below are the **local, single-user stdio** server (a
+> Personal Access Token on your own machine). For a **remote, multi-user OAuth** server you self-host
+> (Docker on your homelab, reachable over Tailscale/LAN, each person logging in with their own YNAB
+> account), see **[docs/DEPLOY.md](docs/DEPLOY.md)** — that is the primary deployment. This package is
+> not published to npm; build it locally first with `npm install && npm run build`.
+
 ### 3. Add to Claude Code
+
+After `npm run build`, point the client at the built stdio entry (`dist/index.js`):
 
 ```bash
 claude mcp add --transport stdio \
   --env YNAB_TOKEN=your-personal-access-token \
   --env YNAB_BUDGET_ID=last-used \
-  ynab -- npx -y @redlinelabs/ynab-mcp
+  ynab -- node /absolute/path/to/ynab-mcp/dist/index.js
 ```
 
 Env vars are scoped to the server process — no global environment setup needed.
@@ -116,8 +165,8 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or
 {
   "mcpServers": {
     "ynab": {
-      "command": "npx",
-      "args": ["-y", "@redlinelabs/ynab-mcp"],
+      "command": "node",
+      "args": ["/absolute/path/to/ynab-mcp/dist/index.js"],
       "env": {
         "YNAB_TOKEN": "your-personal-access-token",
         "YNAB_BUDGET_ID": "last-used"

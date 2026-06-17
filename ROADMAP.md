@@ -47,27 +47,75 @@ read-only by default. See the ADRs for the decisions and trade-offs:
   Vitest (what makes the runtime move cheap).
 - [ADR-0002](docs/adr/0002-remote-oauth-multi-tenant-ynab-upstream.md) — remote OAuth, multi-tenant,
   YNAB upstream, read-only default.
-- [ADR-0003](docs/adr/0003-host-on-cloudflare-workers.md) — Cloudflare Workers (free), homelab
-  docker-compose fallback.
+- [ADR-0003](docs/adr/0003-host-on-cloudflare-workers.md) — Cloudflare Workers (superseded by 0004).
+- [ADR-0004](docs/adr/0004-self-host-node-docker-private.md) — self-host on Node + Docker (private),
+  dropping Cloudflare Workers.
+
+### Auth architecture (shipped 2026-06 — self-hosted Node/Docker per ADR-0004)
+
+The product is a **multi-tenant OAuth MCP server as a self-hosted Node 24 + Express + Docker
+process** (ADR-0004 supersedes the Cloudflare Workers build of ADR-0003, which is gone). It is
+reachable on a private HTTPS front (Tailscale `serve` / reverse proxy); anyone who can reach it logs
+in with their own YNAB account and gets their own isolated, read-only-by-default grant.
+
+- **OAuth server to MCP clients** — the MCP SDK's Express `mcpAuthRouter` (`/authorize`, `/token`,
+  `/register`, `/revoke`, `.well-known` metadata) + a custom `OAuthServerProvider`
+  (`src/oauth-server.ts`): DCR, PKCE validation, our own code/token issuance. `requireBearerAuth`
+  guards `/mcp` (stateless `StreamableHTTPServerTransport`, one per request).
+- **Persistence** — `src/store.ts` over built-in `node:sqlite` (single file on a volume): clients,
+  in-flight authorize/login state, issued codes/tokens (by SHA-256 hash), and per-tenant grants.
+- **Encryption at rest** — `src/encryption.ts` AES-256-GCM seals the YNAB tokens in each grant
+  (`ENCRYPTION_KEY` env); our own issued tokens are stored only as hashes.
+- **YNAB upstream leg** — `provider.authorize` renders the consent screen and stashes a `pending_auth`
+  row; `POST /ynab/consent` starts the YNAB PKCE leg (`src/pkce.ts`) with DB-backed `login_state`;
+  `GET /callback` exchanges the code (`src/ynab-oauth.ts`), creates the sealed grant keyed by YNAB
+  user id, and mints our authorization code.
+- **Scope via consent screen** — read-only default; opt into write at login (one auth).
+- **Token longevity** — on MCP-client refresh the provider refreshes the upstream YNAB token under
+  the grant; YNAB refresh tokens never expire → "connect once, forever".
+
+The Node server (`src/server.ts`) and all core modules are `tsgo`-checked and unit-tested
+network-free; the Express + SDK-router wiring is validated by a boot smoke-test (health, OAuth
+metadata, DCR, consent render, 401 on unauthenticated `/mcp`).
+
+**Verified YNAB OAuth facts (2026-06, official docs):** access tokens last **2 hours**; **refresh
+tokens have no stated expiry and no inactivity timeout** — they persist until manually revoked, so a
+connection authenticated once survives indefinitely (the "connect once, forever" property). A
+`read-only` scope exists and returns `403` on POST/PATCH/DELETE.
+
+### npm / stdio distribution: demoted (done 2026-06)
+
+The self-hosted Docker server is **the** product; the deploy artifact is a container image, not an
+npm package. Done: `package.json` is `private` with `bin`/`files` removed, the release workflow's
+`npm publish` job is gone (release-please stays for versioning/CHANGELOG), and the README's `npx`
+story now points at the local stdio build + `docs/DEPLOY.md`. `src/index.ts` (stdio + Personal Access
+Token) remains a local developer/single-user escape hatch (`npm run start:stdio`); the shared core
+(`tools.ts`, `client.ts`, …) backs both entry points.
 
 ## Not yet built
 
-- **Delta-sync _cache_** — the client passes filters but does not thread `server_knowledge` or
-  persist a store. Biggest lever against the 200/hr limit; needs the persistence layer that the
-  remote server will introduce, so it's deferred until then rather than half-built.
-- **Deployment** — `wrangler.toml` has a placeholder KV namespace id. Run
-  `wrangler kv namespace create OAUTH_KV`, paste the id into `wrangler.toml`, set secrets
-  (`YNAB_CLIENT_ID`, `YNAB_CLIENT_SECRET`, `YNAB_REDIRECT_URI`, `COOKIE_SECRET`) via
-  `wrangler secret put`, then `wrangler deploy`.
+- **Delta-sync _cache_** — the read tools pass filters but don't thread `server_knowledge` or persist
+  a transaction store. Biggest lever against the 200/hr limit; the SQLite store (`src/store.ts`) is
+  now the persistence layer it was waiting on, so it can finally be built.
+- **Deployment** (user-gated — needs your hardware + YNAB credentials): see `docs/DEPLOY.md`. In
+  short: `openssl rand -base64 32` for `ENCRYPTION_KEY`, create a YNAB OAuth app with redirect URI
+  `${PUBLIC_URL}/callback`, fill `.env`, `docker compose up -d`, front it with Tailscale `serve` (or
+  a reverse proxy), then add `${PUBLIC_URL}/mcp` as a remote MCP server in the client.
+- **Docker image not built here** — `npm run build` + a boot smoke-test pass, and the `Dockerfile`
+  is written, but `docker build` was not run in this environment (no Docker). Validate it on a host
+  with Docker before relying on the image.
 
 ## Shipped
 
 - **Tool layer (phases 1–3)** — 23 tools across 7 toolsets, fully tested (Vitest, network-free).
 - **Scheduled-transaction CRUD** — `list`, `get`, `create`, `update`, `delete_scheduled_transaction`.
-- **Cloudflare Workers OAuth layer** — Streamable-HTTP transport via `McpAgent`, YNAB
-  authorization code exchange, token refresh with KV write-back, state-cookie CSRF protection,
-  scope-gated read-only/full contexts, `/authorize` and `/callback` routing in the worker fetch
-  handler. Fully tested (105 Vitest tests, network-free).
+- **Multi-tenant remote OAuth server (self-hosted Node/Docker, ADR-0004)** — the MCP SDK's Express
+  `mcpAuthRouter` + a custom `OAuthServerProvider` (DCR, PKCE, our own code/token issuance), YNAB as
+  upstream IdP over a PKCE authorization-code flow, a consent screen for read-only/write scope,
+  `node:sqlite` persistence, AES-256-GCM sealing of YNAB tokens at rest, stateless Streamable-HTTP
+  `/mcp` behind `requireBearerAuth`, and transparent YNAB token refresh on MCP-client refresh.
+  Shipped with a `Dockerfile`, `docker-compose.yml` (+ optional Tailscale sidecar), and
+  `docs/DEPLOY.md`. 114 network-free Vitest tests; Express/SDK wiring validated by a boot smoke-test.
 
 ## Known limitations / constraints
 

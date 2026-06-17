@@ -44,9 +44,16 @@ _Avoid_: cents, minor units.
 ## System
 
 **Tenant**:
-One end user of a deployed instance, identified by their own YNAB account. Tenants are isolated —
-one tenant's tokens and data are never visible to another.
-_Avoid_: customer, client (those are budgeting-ambiguous here).
+One authenticated connection between an MCP client and a YNAB account — concretely, one OAuth
+**grant**. Isolation is per grant, not per human: the same person connecting from two MCP clients
+holds two independent Tenants, each with its own stored refresh token, and revoking one never
+touches the other. One Tenant's tokens and data are never visible to another.
+_Avoid_: customer, client (those are budgeting-ambiguous here); user (one human ≠ one Tenant).
+
+**Grant**:
+The persisted record of one Tenant's authorization — the encrypted YNAB tokens plus the chosen
+scope (read-only or full), keyed by the OAuth flow rather than by human identity. The unit of
+isolation and of revocation.
 
 **Toolset**:
 A named group of tools (`budgets`, `accounts`, `categories`, `transactions`, `months`, `payees`,
