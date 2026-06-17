@@ -3,7 +3,13 @@
 # One directory per app: this file + a .env alongside it. See docs/DEPLOY.md.
 #
 #   .env keys: TS_HOSTNAME, TS_AUTHKEY, YNAB_CLIENT_ID, YNAB_CLIENT_SECRET,
-#              ENCRYPTION_KEY, DATA_DIR
+#              ENCRYPTION_KEY, DATA_DIR, and (optional) PUID / PGID
+#
+# State is bind-mounted under ${DATA_DIR} so it lands on your own dataset (e.g. for
+# ZFS snapshots). The app runs as ${PUID:-1000}:${PGID:-1000} — set PUID/PGID to the
+# uid:gid that owns ${DATA_DIR}/data (find it with `ls -n ${DATA_DIR}`), or leave the
+# default and `chown -R 1000:1000 ${DATA_DIR}/data`. Otherwise the app can't create
+# its SQLite file (SQLITE_CANTOPEN).
 #
 # The image is published by .github/workflows/docker-publish.yml. If the GHCR
 # package is private, `docker login ghcr.io` on the host first (or make it public).
@@ -56,6 +62,7 @@ services:
     #   build: https://github.com/redlinelabs-dev/ynab-mcp.git#main   # from GitHub
     #   build: .                                                       # from a checkout
     container_name: ynab-mcp
+    user: "${PUID:-1000}:${PGID:-1000}" # must own ${DATA_DIR}/data (see header)
     network_mode: service:tailscale-ynab # share the sidecar's network namespace
     depends_on:
       tailscale-ynab:

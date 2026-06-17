@@ -40,14 +40,26 @@ TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx
 YNAB_CLIENT_ID=your-ynab-oauth-client-id
 YNAB_CLIENT_SECRET=your-ynab-oauth-client-secret
 ENCRYPTION_KEY=base64-of-32-random-bytes
-DATA_DIR=/mnt/HomeServer/Apps/ynab-mcp
+DATA_DIR=/mnt/HomeServer/Vault/Apps/ynab-mcp
+PUID=1000
+PGID=1000
 ENV
 ```
 
 - `TS_HOSTNAME` must match the `hostname:` in the compose (`ynab`) + your tailnet.
 - `TS_AUTHKEY` — https://login.tailscale.com/admin/settings/keys.
 - `DATA_DIR` — host dir for the SQLite db (`${DATA_DIR}/data`) and tailscale state
-  (`${DATA_DIR}/tailscale`); both are bind-mounted.
+  (`${DATA_DIR}/tailscale`); both bind-mounted, so they land on your own dataset
+  (snapshot-friendly).
+- `PUID`/`PGID` — the uid:gid the app runs as; it **must own `${DATA_DIR}/data`**, or
+  the server can't create its SQLite file (`SQLITE_CANTOPEN`, errcode 14). Default
+  `1000` (the image's `node` user). Either set these to your dataset's owner
+  (`ls -n ${DATA_DIR}`) **or** make the dir match the default:
+  ```bash
+  sudo mkdir -p ${DATA_DIR}/data ${DATA_DIR}/tailscale
+  sudo chown -R 1000:1000 ${DATA_DIR}/data
+  ```
+  The tailscale sidecar runs as root, so `${DATA_DIR}/tailscale` needs no chown.
 
 ## 4. Pull access (GHCR)
 
