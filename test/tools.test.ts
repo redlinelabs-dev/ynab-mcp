@@ -123,6 +123,68 @@ describe("handleTool", () => {
     ).rejects.toThrow(/sum/i);
   });
 
+  function capturingFetch(payload: unknown) {
+    const calls: { url: string; method: string; body: string }[] = [];
+    const fn: typeof fetch = (input, init) => {
+      const req = new Request(input, init);
+      return req.text().then((body) => {
+        calls.push({ url: req.url, method: req.method, body });
+        return new Response(JSON.stringify(payload), { status: 200 });
+      });
+    };
+    return { fn, calls };
+  }
+
+  it("get_user returns the user id", async () => {
+    const ctx = ctxWith(fetchReturning({ data: { user: { id: "user-7" } } }));
+    expect(JSON.parse(await handleTool(ctx, "get_user", {})).id).toBe("user-7");
+  });
+
+  it("update_payee PATCHes the payee with the new name", async () => {
+    const { fn, calls } = capturingFetch({ data: { payee: { id: "p1", name: "Costco" } } });
+    await handleTool(ctxWith(fn), "update_payee", { payee_id: "p1", name: "Costco" });
+    expect(calls[0]?.method).toBe("PATCH");
+    expect(calls[0]?.url).toContain("/payees/p1");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ payee: { name: "Costco" } });
+  });
+
+  it("update_category moves a category to another group (category_group_id)", async () => {
+    const { fn, calls } = capturingFetch({ data: { category: { id: "c1", name: "Rent" } } });
+    await handleTool(ctxWith(fn), "update_category", {
+      category_id: "c1",
+      category_group_id: "grp-2",
+    });
+    expect(calls[0]?.method).toBe("PATCH");
+    expect(calls[0]?.url).toContain("/categories/c1");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      category: { category_group_id: "grp-2" },
+    });
+  });
+
+  it("bulk_create_transactions POSTs an array and summarizes the result", async () => {
+    const { fn, calls } = capturingFetch({
+      data: {
+        transaction_ids: ["t1", "t2"],
+        transactions: [
+          { id: "t1", account_id: "a", amount: -1000, date: "2026-06-18" },
+          { id: "t2", account_id: "a", amount: -2000, date: "2026-06-18" },
+        ],
+        duplicate_import_ids: [],
+      },
+    });
+    const out = JSON.parse(
+      await handleTool(ctxWith(fn), "bulk_create_transactions", {
+        transactions: [
+          { account_id: "a", date: "2026-06-18", amount: -1000 },
+          { account_id: "a", date: "2026-06-18", amount: -2000 },
+        ],
+      }),
+    );
+    expect(calls[0]?.method).toBe("POST");
+    expect(JSON.parse(calls[0]?.body ?? "{}").transactions).toHaveLength(2);
+    expect(out.created).toBe(2);
+  });
+
   it("spending_summary aggregates transactions by category", async () => {
     const ctx = ctxWith(
       fetchReturning({

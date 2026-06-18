@@ -19,21 +19,33 @@ import {
   BudgetsResponseSchema,
   BulkTransactionsResponseSchema,
   CategoriesResponseSchema,
+  CategoryGroupResponseSchema,
   CategoryResponseSchema,
   ImportResponseSchema,
   MonthResponseSchema,
   MonthsResponseSchema,
+  PayeeLocationResponseSchema,
+  PayeeLocationsResponseSchema,
+  PayeeResponseSchema,
   PayeesResponseSchema,
   ScheduledTransactionResponseSchema,
   ScheduledTransactionsResponseSchema,
   TransactionResponseSchema,
   TransactionsResponseSchema,
+  UserResponseSchema,
 } from "./schemas.js";
 import {
+  buildBulkCreateBody,
   buildBulkTransactionsBody,
   buildSaveScheduledTransaction,
   buildSaveTransaction,
 } from "./transactions.js";
+
+export interface SaveCategoryFields {
+  name?: string;
+  note?: string | null;
+  category_group_id?: string;
+}
 
 export type FetchFn = typeof fetch;
 
@@ -101,6 +113,13 @@ export class YnabClient {
     return data.data.settings;
   }
 
+  // --- User ---
+
+  async getUser() {
+    const data = await this.getTyped(UserResponseSchema, "/user");
+    return data.data.user;
+  }
+
   // --- Accounts ---
 
   async listAccounts(budget: string) {
@@ -149,6 +168,54 @@ export class YnabClient {
       { category: { budgeted } },
     );
     return data.data.category;
+  }
+
+  async getMonthCategory(budget: string, month: string, categoryId: string) {
+    const data = await this.getTyped(
+      CategoryResponseSchema,
+      `/budgets/${budget}/months/${month}/categories/${categoryId}`,
+    );
+    return data.data.category;
+  }
+
+  async createCategory(budget: string, fields: SaveCategoryFields) {
+    const data = await this.sendTyped(
+      "POST",
+      CategoryResponseSchema,
+      `/budgets/${budget}/categories`,
+      { category: fields },
+    );
+    return data.data.category;
+  }
+
+  async updateCategory(budget: string, categoryId: string, fields: SaveCategoryFields) {
+    const data = await this.sendTyped(
+      "PATCH",
+      CategoryResponseSchema,
+      `/budgets/${budget}/categories/${categoryId}`,
+      { category: fields },
+    );
+    return data.data.category;
+  }
+
+  async createCategoryGroup(budget: string, name: string) {
+    const data = await this.sendTyped(
+      "POST",
+      CategoryGroupResponseSchema,
+      `/budgets/${budget}/category_groups`,
+      { category_group: { name } },
+    );
+    return data.data.category_group;
+  }
+
+  async updateCategoryGroup(budget: string, categoryGroupId: string, name: string) {
+    const data = await this.sendTyped(
+      "PATCH",
+      CategoryGroupResponseSchema,
+      `/budgets/${budget}/category_groups/${categoryGroupId}`,
+      { category_group: { name } },
+    );
+    return data.data.category_group;
   }
 
   // --- Transactions ---
@@ -204,6 +271,16 @@ export class YnabClient {
     return data.data;
   }
 
+  async bulkCreateTransactions(budget: string, items: SaveTxnFields[]) {
+    const data = await this.sendTyped(
+      "POST",
+      BulkTransactionsResponseSchema,
+      `/budgets/${budget}/transactions`,
+      buildBulkCreateBody(items),
+    );
+    return data.data;
+  }
+
   async deleteTransaction(budget: string, transactionId: string) {
     const r = await this.rawFetch("DELETE", `/budgets/${budget}/transactions/${transactionId}`);
     const json: unknown = await r.json();
@@ -244,6 +321,17 @@ export class YnabClient {
     const data = await this.getTyped(
       TransactionsResponseSchema,
       `/budgets/${budget}/categories/${categoryId}/transactions${qs}`,
+    );
+    return data.data.transactions;
+  }
+
+  async listMonthTransactions(budget: string, month: string, opts: ListTransactionsOptions = {}) {
+    const params = new URLSearchParams();
+    if (opts.since_date) params.set("since_date", opts.since_date);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    const data = await this.getTyped(
+      TransactionsResponseSchema,
+      `/budgets/${budget}/months/${month}/transactions${qs}`,
     );
     return data.data.transactions;
   }
@@ -316,5 +404,46 @@ export class YnabClient {
   async listPayees(budget: string) {
     const data = await this.getTyped(PayeesResponseSchema, `/budgets/${budget}/payees`);
     return data.data.payees;
+  }
+
+  async getPayee(budget: string, payeeId: string) {
+    const data = await this.getTyped(PayeeResponseSchema, `/budgets/${budget}/payees/${payeeId}`);
+    return data.data.payee;
+  }
+
+  async updatePayee(budget: string, payeeId: string, name: string) {
+    const data = await this.sendTyped(
+      "PATCH",
+      PayeeResponseSchema,
+      `/budgets/${budget}/payees/${payeeId}`,
+      { payee: { name } },
+    );
+    return data.data.payee;
+  }
+
+  // --- Payee locations (read-only; GPS data set by the mobile app) ---
+
+  async listPayeeLocations(budget: string) {
+    const data = await this.getTyped(
+      PayeeLocationsResponseSchema,
+      `/budgets/${budget}/payee_locations`,
+    );
+    return data.data.payee_locations;
+  }
+
+  async getPayeeLocation(budget: string, payeeLocationId: string) {
+    const data = await this.getTyped(
+      PayeeLocationResponseSchema,
+      `/budgets/${budget}/payee_locations/${payeeLocationId}`,
+    );
+    return data.data.payee_location;
+  }
+
+  async listPayeeLocationsForPayee(budget: string, payeeId: string) {
+    const data = await this.getTyped(
+      PayeeLocationsResponseSchema,
+      `/budgets/${budget}/payees/${payeeId}/payee_locations`,
+    );
+    return data.data.payee_locations;
   }
 }

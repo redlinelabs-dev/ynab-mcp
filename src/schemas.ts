@@ -123,6 +123,10 @@ export const CategoryResponseSchema = dataEnvelope(
   z.object({ category: CategorySchema }).passthrough(),
 );
 
+export const CategoryGroupResponseSchema = dataEnvelope(
+  z.object({ category_group: CategoryGroupSchema }).passthrough(),
+);
+
 // --- Transaction ---
 
 export const SubTransactionSchema = z
@@ -254,6 +258,32 @@ export const PayeesResponseSchema = dataEnvelope(
   z.object({ payees: z.array(PayeeSchema).catch([]) }).passthrough(),
 );
 
+export const PayeeResponseSchema = dataEnvelope(z.object({ payee: PayeeSchema }).passthrough());
+
+export const PayeeLocationSchema = z
+  .object({
+    id: z.string(),
+    payee_id: z.string().catch(""),
+    latitude: z.string().nullable().catch(null),
+    longitude: z.string().nullable().catch(null),
+    deleted: z.boolean().catch(false),
+  })
+  .passthrough();
+
+export const PayeeLocationsResponseSchema = dataEnvelope(
+  z.object({ payee_locations: z.array(PayeeLocationSchema).catch([]) }).passthrough(),
+);
+
+export const PayeeLocationResponseSchema = dataEnvelope(
+  z.object({ payee_location: PayeeLocationSchema }).passthrough(),
+);
+
+// --- User ---
+
+export const UserResponseSchema = dataEnvelope(
+  z.object({ user: z.object({ id: z.string() }).passthrough() }).passthrough(),
+);
+
 // ============================================================================
 // Inferred types — never hand-written
 // ============================================================================
@@ -264,3 +294,5 @@ export type Transaction = z.infer<typeof TransactionSchema>;
 export type ScheduledTransaction = z.infer<typeof ScheduledTransactionSchema>;
 export type MonthSummary = z.infer<typeof MonthSummarySchema>;
 export type Payee = z.infer<typeof PayeeSchema>;
+export type PayeeLocation = z.infer<typeof PayeeLocationSchema>;
+export type CategoryGroup = z.infer<typeof CategoryGroupSchema>;

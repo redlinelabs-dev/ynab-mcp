@@ -97,3 +97,10 @@ export function buildBulkTransactionsBody(updates: BulkTxnUpdate[]): {
     transactions: updates.map(({ id, ...fields }) => ({ id, ...buildSaveTransaction(fields) })),
   };
 }
+
+/** Build the `{ transactions: [...] }` wrapper for bulk CREATE (POST with an array). */
+export function buildBulkCreateBody(items: SaveTxnFields[]): {
+  transactions: Record<string, unknown>[];
+} {
+  return { transactions: items.map((fields) => buildSaveTransaction(fields)) };
+}

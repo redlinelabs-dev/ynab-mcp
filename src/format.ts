@@ -6,8 +6,10 @@
 import type {
   Account,
   Category,
+  CategoryGroup,
   MonthSummary,
   Payee,
+  PayeeLocation,
   ScheduledTransaction,
   Transaction,
 } from "./schemas.js";
@@ -96,4 +98,12 @@ export function formatMonth(m: MonthSummary) {
 
 export function formatPayee(p: Payee) {
   return { id: p.id, name: p.name, is_transfer: p.transfer_account_id !== null };
+}
+
+export function formatPayeeLocation(l: PayeeLocation) {
+  return { id: l.id, payee_id: l.payee_id, latitude: l.latitude, longitude: l.longitude };
+}
+
+export function formatCategoryGroup(g: CategoryGroup) {
+  return { id: g.id, name: g.name, hidden: g.hidden };
 }

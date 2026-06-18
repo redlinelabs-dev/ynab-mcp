@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBulkTransactionsBody, buildSaveTransaction } from "../src/transactions.js";
+import {
+  buildBulkCreateBody,
+  buildBulkTransactionsBody,
+  buildSaveTransaction,
+} from "../src/transactions.js";
 
 describe("buildSaveTransaction", () => {
   it("includes only provided fields and omits undefined ones", () => {
@@ -46,6 +50,34 @@ describe("buildSaveTransaction", () => {
     });
 
     expect(body).toEqual({ subtransactions: [{ amount: -1000, category_id: null }] });
+  });
+});
+
+describe("buildBulkCreateBody", () => {
+  it("wraps each new transaction under transactions[], cleaning each (incl. splits)", () => {
+    const body = buildBulkCreateBody([
+      { account_id: "a", date: "2026-06-18", amount: -1000, category_id: "c1", memo: undefined },
+      {
+        account_id: "a",
+        date: "2026-06-18",
+        amount: -5000,
+        category_id: null,
+        subtransactions: [{ amount: -2000, category_id: "x" }],
+      },
+    ]);
+
+    expect(body).toEqual({
+      transactions: [
+        { account_id: "a", date: "2026-06-18", amount: -1000, category_id: "c1" },
+        {
+          account_id: "a",
+          date: "2026-06-18",
+          amount: -5000,
+          category_id: null,
+          subtransactions: [{ amount: -2000, category_id: "x" }],
+        },
+      ],
+    });
   });
 });
 

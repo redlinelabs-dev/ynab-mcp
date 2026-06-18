@@ -20,8 +20,10 @@ import { findDuplicateTransactions } from "./duplicates.js";
 import {
   formatAccount,
   formatCategory,
+  formatCategoryGroup,
   formatMonth,
   formatPayee,
+  formatPayeeLocation,
   formatScheduledTransaction,
   formatTransaction,
 } from "./format.js";
@@ -149,6 +151,33 @@ const SpendingSummaryInput = BudgetArg.extend({
 
 const PayeeTxnsInput = PayeeRef.extend({ since_date: z.string().optional() });
 const CategoryTxnsInput = CategoryRef.extend({ since_date: z.string().optional() });
+
+const UpdatePayeeInput = PayeeRef.extend({ name: z.string() });
+const PayeeLocationRef = BudgetArg.extend({ payee_location_id: z.string() });
+const MonthCategoryRef = MonthRef.extend({ category_id: z.string() });
+const MonthTxnsInput = MonthRef.extend({ since_date: z.string().optional() });
+
+const BulkCreateItem = z.object({
+  account_id: z.string(),
+  date: z.string(),
+  amount: z.number(),
+  import_id: z.string().optional(),
+  subtransactions: z.array(SubtransactionInput).optional(),
+  ...SaveTxnShape,
+});
+const BulkCreateInput = BudgetArg.extend({ transactions: z.array(BulkCreateItem).min(1) });
+
+const CreateCategoryInput = BudgetArg.extend({ name: z.string(), category_group_id: z.string() });
+const UpdateCategoryInput = CategoryRef.extend({
+  name: z.string().optional(),
+  note: z.string().nullable().optional(),
+  category_group_id: z.string().optional(),
+});
+const CreateCategoryGroupInput = BudgetArg.extend({ name: z.string() });
+const UpdateCategoryGroupInput = BudgetArg.extend({
+  category_group_id: z.string(),
+  name: z.string(),
+});
 
 const frequency = z.enum([
   "never",
@@ -625,6 +654,185 @@ export const TOOLS: ToolDef[] = [
       required: ["scheduled_transaction_id"],
     },
   },
+  {
+    name: "get_user",
+    group: "budgets",
+    write: false,
+    description: "Get the authenticated YNAB user's id.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_payee",
+    group: "payees",
+    write: false,
+    description: "Get one payee by id.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, payee_id: { type: "string" } },
+      required: ["payee_id"],
+    },
+  },
+  {
+    name: "update_payee",
+    group: "payees",
+    write: true,
+    description: "Rename a payee.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, payee_id: { type: "string" }, name: { type: "string" } },
+      required: ["payee_id", "name"],
+    },
+  },
+  {
+    name: "list_payee_locations",
+    group: "payees",
+    write: false,
+    description: "List all payee GPS locations (set by the YNAB mobile app).",
+    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+  },
+  {
+    name: "get_payee_location",
+    group: "payees",
+    write: false,
+    description: "Get one payee location by id.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, payee_location_id: { type: "string" } },
+      required: ["payee_location_id"],
+    },
+  },
+  {
+    name: "payee_locations",
+    group: "payees",
+    write: false,
+    description: "List the GPS locations recorded for one payee.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, payee_id: { type: "string" } },
+      required: ["payee_id"],
+    },
+  },
+  {
+    name: "get_month_category",
+    group: "categories",
+    write: false,
+    description: "Get one category's figures for a specific month (budgeted/activity/balance).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        month: { type: "string", description: 'ISO month or "current". Defaults to current.' },
+        category_id: { type: "string" },
+      },
+      required: ["category_id"],
+    },
+  },
+  {
+    name: "create_category",
+    group: "categories",
+    write: true,
+    description:
+      "Create a category in a category group (newer YNAB endpoint; verify availability on your plan).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        name: { type: "string" },
+        category_group_id: { type: "string" },
+      },
+      required: ["name", "category_group_id"],
+    },
+  },
+  {
+    name: "update_category",
+    group: "categories",
+    write: true,
+    description:
+      "Rename a category, set its note, and/or MOVE it to another group via category_group_id (newer YNAB endpoint). Note: YNAB has no API for reordering categories within a group.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        category_id: { type: "string" },
+        name: { type: "string" },
+        note: { type: "string" },
+        category_group_id: { type: "string", description: "Move the category into this group." },
+      },
+      required: ["category_id"],
+    },
+  },
+  {
+    name: "create_category_group",
+    group: "categories",
+    write: true,
+    description: "Create a category group (newer YNAB endpoint; verify availability on your plan).",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_category_group",
+    group: "categories",
+    write: true,
+    description: "Rename a category group (newer YNAB endpoint).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        category_group_id: { type: "string" },
+        name: { type: "string" },
+      },
+      required: ["category_group_id", "name"],
+    },
+  },
+  {
+    name: "month_transactions",
+    group: "transactions",
+    write: false,
+    description: "List transactions for a specific budget month.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        month: { type: "string", description: 'ISO month or "current". Defaults to current.' },
+        since_date: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "bulk_create_transactions",
+    group: "transactions",
+    write: true,
+    description:
+      "Create MANY transactions in one call (POST array). Each item needs account_id, date, amount; optional category_id, payee, memo, import_id, and subtransactions[] for splits. Returns created ids + any duplicate_import_ids.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        transactions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              account_id: { type: "string" },
+              date: { type: "string" },
+              amount: { type: "number", description: "Milliunits; negative outflow." },
+              import_id: { type: "string" },
+              subtransactions: {
+                type: "array",
+                items: { type: "object", properties: subtransactionProps, required: ["amount"] },
+              },
+              ...txnFieldProps,
+            },
+            required: ["account_id", "date", "amount"],
+          },
+        },
+      },
+      required: ["transactions"],
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -887,6 +1095,85 @@ export async function handleTool(
         args.scheduled_transaction_id,
       );
       return json(formatScheduledTransaction(s));
+    }
+    case "get_user": {
+      return json({ id: (await client.getUser()).id });
+    }
+    case "get_payee": {
+      const args = PayeeRef.parse(rawArgs);
+      return json(formatPayee(await client.getPayee(budget(args), args.payee_id)));
+    }
+    case "update_payee": {
+      const args = UpdatePayeeInput.parse(rawArgs);
+      return json(formatPayee(await client.updatePayee(budget(args), args.payee_id, args.name)));
+    }
+    case "list_payee_locations": {
+      const args = BudgetArg.parse(rawArgs);
+      const locations = await client.listPayeeLocations(budget(args));
+      return json(locations.filter((l) => !l.deleted).map(formatPayeeLocation));
+    }
+    case "get_payee_location": {
+      const args = PayeeLocationRef.parse(rawArgs);
+      return json(
+        formatPayeeLocation(await client.getPayeeLocation(budget(args), args.payee_location_id)),
+      );
+    }
+    case "payee_locations": {
+      const args = PayeeRef.parse(rawArgs);
+      const locations = await client.listPayeeLocationsForPayee(budget(args), args.payee_id);
+      return json(locations.filter((l) => !l.deleted).map(formatPayeeLocation));
+    }
+    case "get_month_category": {
+      const args = MonthCategoryRef.parse(rawArgs);
+      return json(
+        formatCategory(await client.getMonthCategory(budget(args), args.month, args.category_id)),
+      );
+    }
+    case "create_category": {
+      const args = CreateCategoryInput.parse(rawArgs);
+      const category = await client.createCategory(budget(args), {
+        name: args.name,
+        category_group_id: args.category_group_id,
+      });
+      return json(formatCategory(category));
+    }
+    case "update_category": {
+      const args = UpdateCategoryInput.parse(rawArgs);
+      const category = await client.updateCategory(budget(args), args.category_id, {
+        name: args.name,
+        note: args.note,
+        category_group_id: args.category_group_id,
+      });
+      return json(formatCategory(category));
+    }
+    case "create_category_group": {
+      const args = CreateCategoryGroupInput.parse(rawArgs);
+      return json(formatCategoryGroup(await client.createCategoryGroup(budget(args), args.name)));
+    }
+    case "update_category_group": {
+      const args = UpdateCategoryGroupInput.parse(rawArgs);
+      return json(
+        formatCategoryGroup(
+          await client.updateCategoryGroup(budget(args), args.category_group_id, args.name),
+        ),
+      );
+    }
+    case "month_transactions": {
+      const args = MonthTxnsInput.parse(rawArgs);
+      const txns = await client.listMonthTransactions(budget(args), args.month, {
+        ...(args.since_date !== undefined && { since_date: args.since_date }),
+      });
+      return json(txns.filter((t) => !t.deleted).map(formatTransaction));
+    }
+    case "bulk_create_transactions": {
+      const args = BulkCreateInput.parse(rawArgs);
+      const result = await client.bulkCreateTransactions(budget(args), args.transactions);
+      return json({
+        created: result.transaction_ids.length,
+        transaction_ids: result.transaction_ids,
+        transactions: result.transactions.map(formatTransaction),
+        duplicate_import_ids: result.duplicate_import_ids,
+      });
     }
     default:
       throw new Error(`Unknown tool: ${name}`);

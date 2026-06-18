@@ -31,10 +31,8 @@ linking** and a **200 requests/hour** rate limit — drive most of the design de
 
 ## Status (2026-06)
 
-Phases 1–3 of the **tool** work are **implemented and tested** (Vitest, network-free via injected
-fetch): 23 tools across 7 toolsets. Shipped: `bulk_update_transactions`, `delete_transaction`,
-`find_duplicate_transactions`, `import_transactions`, `create_account`, `spending_summary`,
-`payee_transactions`, `category_transactions`, `list_scheduled_transactions`.
+The **tool** work is **implemented and tested** (Vitest, network-free via injected fetch): **40 tools
+across 7 toolsets** — near-complete YNAB API coverage (see Shipped below for the full breakdown).
 
 ## Direction shift: remote OAuth server (decided, not yet built)
 
@@ -107,7 +105,18 @@ Token) remains a local developer/single-user escape hatch (`npm run start:stdio`
 
 ## Shipped
 
-- **Tool layer (phases 1–3)** — 23 tools across 7 toolsets, fully tested (Vitest, network-free).
+- **Tool layer** — **40 tools across 7 toolsets**, fully tested (Vitest, network-free). Near-complete
+  YNAB API coverage: budgets/settings/user, accounts, categories (incl. `create_category`,
+  `update_category` to rename/move-between-groups, `create_category_group`, `update_category_group`,
+  `get_month_category`), transactions (browse, get, create incl. splits, update, **bulk create** +
+  bulk update, delete, find-duplicates, import, by account/category/payee/month, spending summary),
+  months, payees (incl. `update_payee` rename, `get_payee`, payee **locations**), and scheduled CRUD.
+- **Known API gaps (YNAB doesn't expose these):**
+  - **Reordering categories/category groups** — no `sort_order` field or endpoint in the YNAB API.
+    You can rename and **move a category to another group** (`update_category` `category_group_id`),
+    but not reorder within a group. (Category create/group endpoints are newer; verify on your plan.)
+  - **`money_movements`** — newer read-only endpoints exist in YNAB's spec but the response schema
+    isn't published clearly; not yet exposed as a tool.
 - **Scheduled-transaction CRUD** — `list`, `get`, `create`, `update`, `delete_scheduled_transaction`.
 - **Split transactions** — `create_transaction` accepts `subtransactions[]` (+ a `null` parent
   `category_id` and an optional `import_id`) to allocate one purchase across multiple categories in a
