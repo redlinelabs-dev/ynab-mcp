@@ -72,6 +72,9 @@ services:
       - YNAB_CLIENT_ID=${YNAB_CLIENT_ID}
       - YNAB_CLIENT_SECRET=${YNAB_CLIENT_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # Optional (see .env.example): accept a YNAB PAT as the /mcp bearer; gate writes.
+      - YNAB_PAT_PASSTHROUGH=${YNAB_PAT_PASSTHROUGH:-}
+      - YNAB_READ_ONLY=${YNAB_READ_ONLY:-}
     volumes:
       - ${DATA_DIR}/data:/app/data
     restart: unless-stopped
