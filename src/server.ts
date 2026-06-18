@@ -71,6 +71,21 @@ async function main(): Promise<void> {
   // the client IP instead of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
   app.set("trust proxy", "loopback");
 
+  // Lightweight request log (skips /health) — shows requests arriving + their
+  // status/duration, so a hanging call is visible as a "→" with no matching "←".
+  app.use((req, res, next) => {
+    if (req.path === "/health") {
+      next();
+      return;
+    }
+    const startedAt = Date.now();
+    console.error(`→ ${req.method} ${req.path}`);
+    res.on("finish", () => {
+      console.error(`← ${req.method} ${req.path} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    });
+    next();
+  });
+
   // The MCP endpoint is the OAuth protected resource (RFC 9728). Advertising it as
   // `${PUBLIC_URL}/mcp` makes the SDK serve protected-resource metadata at
   // /.well-known/oauth-protected-resource/mcp, which clients (Claude Desktop, etc.)
@@ -178,7 +193,14 @@ async function handleMcp(
     );
   }
 
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  // enableJsonResponse: reply with a single JSON body instead of an SSE stream —
+  // SSE gets buffered by reverse proxies (e.g. Tailscale `serve`), which makes
+  // tool calls hang until the client times out.
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  console.error(`[mcp] context ready (refreshed=${refreshed ? "yes" : "no"}) → transport`);
   const server = buildMcpServer(ctx);
   res.on("close", () => {
     void transport.close();
