@@ -43,6 +43,7 @@ export function formatCategory(c: Category) {
 }
 
 export function formatTransaction(t: Transaction) {
+  const legs = (t.subtransactions ?? []).filter((s) => !s.deleted);
   return {
     id: t.id,
     date: t.date,
@@ -55,6 +56,15 @@ export function formatTransaction(t: Transaction) {
     cleared: t.cleared,
     approved: t.approved,
     flag_color: t.flag_color,
+    ...(legs.length > 0 && {
+      subtransactions: legs.map((s) => ({
+        amount: s.amount,
+        amount_units: units(s.amount),
+        category: s.category_name,
+        payee: s.payee_name,
+        memo: s.memo,
+      })),
+    }),
   };
 }
 

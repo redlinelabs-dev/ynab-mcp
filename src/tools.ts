@@ -80,11 +80,32 @@ const SaveTxnShape = {
   flag_color: flagColor.nullable().optional(),
 };
 
+const SubtransactionInput = z.object({
+  amount: z.number(),
+  payee_id: z.string().optional(),
+  payee_name: z.string().optional(),
+  category_id: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+});
+
 const CreateTransactionInput = BudgetArg.extend({
   account_id: z.string(),
   date: z.string(),
   amount: z.number(),
+  import_id: z.string().optional(),
+  subtransactions: z.array(SubtransactionInput).optional(),
   ...SaveTxnShape,
+}).superRefine((val, ctx) => {
+  // A split's legs must sum to the parent amount, or YNAB rejects it.
+  if (val.subtransactions && val.subtransactions.length > 0) {
+    const sum = val.subtransactions.reduce((acc, s) => acc + s.amount, 0);
+    if (sum !== val.amount) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Split legs sum to ${sum} but the transaction amount is ${val.amount} — they must match (milliunits).`,
+      });
+    }
+  }
 });
 
 const UpdateTransactionInput = TransactionRef.extend({
@@ -189,6 +210,17 @@ const txnFieldProps = {
   cleared: { type: "string", enum: ["cleared", "uncleared", "reconciled"] },
   approved: { type: "boolean" },
   flag_color: { type: "string", enum: ["red", "orange", "yellow", "green", "blue", "purple"] },
+} as const;
+
+const subtransactionProps = {
+  amount: {
+    type: "number",
+    description: "Milliunits; same sign as the parent (legs sum to amount).",
+  },
+  category_id: { type: "string" },
+  payee_id: { type: "string" },
+  payee_name: { type: "string" },
+  memo: { type: "string" },
 } as const;
 
 export const TOOLS: ToolDef[] = [
@@ -310,7 +342,8 @@ export const TOOLS: ToolDef[] = [
     name: "create_transaction",
     group: "transactions",
     write: true,
-    description: "Create a transaction. amount is milliunits (negative = outflow).",
+    description:
+      "Create a transaction. amount is milliunits (negative = outflow). For a SPLIT across categories (e.g. a mixed Walmart/Target/Amazon receipt), set category_id to null and pass subtransactions whose amounts sum to amount; optionally set import_id so it matches the later bank-imported transaction. YNAB supports splits only on create — the leg breakdown of an existing split cannot be edited via the API.",
     inputSchema: {
       type: "object",
       properties: {
@@ -318,6 +351,16 @@ export const TOOLS: ToolDef[] = [
         account_id: { type: "string" },
         date: { type: "string", description: "ISO date, e.g. 2026-06-08." },
         amount: { type: "number", description: "Milliunits; negative outflow, positive inflow." },
+        import_id: {
+          type: "string",
+          description: "Optional dedupe/match key so a later bank import reconciles to this txn.",
+        },
+        subtransactions: {
+          type: "array",
+          description:
+            "Split legs. Set the parent category_id to null; leg amounts must sum to amount.",
+          items: { type: "object", properties: subtransactionProps, required: ["amount"] },
+        },
         ...txnFieldProps,
       },
       required: ["account_id", "date", "amount"],

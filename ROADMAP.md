@@ -109,6 +109,13 @@ Token) remains a local developer/single-user escape hatch (`npm run start:stdio`
 
 - **Tool layer (phases 1–3)** — 23 tools across 7 toolsets, fully tested (Vitest, network-free).
 - **Scheduled-transaction CRUD** — `list`, `get`, `create`, `update`, `delete_scheduled_transaction`.
+- **Split transactions** — `create_transaction` accepts `subtransactions[]` (+ a `null` parent
+  `category_id` and an optional `import_id`) to allocate one purchase across multiple categories in a
+  single call — e.g. a mixed Walmart/Target/Amazon receipt entered before the bank import arrives.
+  Leg amounts are validated to sum to the parent. **Upstream limit:** the YNAB API does not support
+  editing the subtransaction breakdown of an _existing_ split, so this is create-only (a split can be
+  recreated, not re-split in place). Splits are surfaced in read output too (`list_transactions`,
+  `get_transaction`, …).
 - **Multi-tenant remote OAuth server (self-hosted Node/Docker, ADR-0004)** — the MCP SDK's Express
   `mcpAuthRouter` + a custom `OAuthServerProvider` (DCR, PKCE, our own code/token issuance), YNAB as
   upstream IdP over a PKCE authorization-code flow, a consent screen for read-only/write scope,

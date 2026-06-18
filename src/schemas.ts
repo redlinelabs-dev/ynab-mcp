@@ -125,6 +125,19 @@ export const CategoryResponseSchema = dataEnvelope(
 
 // --- Transaction ---
 
+export const SubTransactionSchema = z
+  .object({
+    id: z.string().catch(""),
+    amount: z.number().catch(0),
+    memo: z.string().nullable().catch(null),
+    payee_id: z.string().nullable().catch(null),
+    payee_name: z.string().nullable().catch(null),
+    category_id: z.string().nullable().catch(null),
+    category_name: z.string().nullable().catch(null),
+    deleted: z.boolean().catch(false),
+  })
+  .passthrough();
+
 export const TransactionSchema = z
   .object({
     id: z.string(),
@@ -142,6 +155,7 @@ export const TransactionSchema = z
     category_name: z.string().nullable().catch(null),
     import_id: z.string().nullable().catch(null),
     transfer_account_id: z.string().nullable().catch(null),
+    subtransactions: z.array(SubTransactionSchema).catch([]),
     deleted: z.boolean().catch(false),
   })
   .passthrough();

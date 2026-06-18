@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import type { ToolContext } from "../src/tools.js";
 
@@ -46,6 +47,80 @@ describe("handleTool", () => {
     await expect(handleTool(ctx, "delete_transaction", { transaction_id: "t1" })).rejects.toThrow(
       /not enabled/,
     );
+  });
+
+  it("create_transaction sends a split (parent category null + legs) and formats the legs back", async () => {
+    const calls: string[] = [];
+    const fn: typeof fetch = (input, init) => {
+      const req = new Request(input, init);
+      return req.text().then((body) => {
+        calls.push(body);
+        return new Response(
+          JSON.stringify({
+            data: {
+              transaction: {
+                id: "t-new",
+                date: "2026-06-18",
+                amount: -5000,
+                category_id: null,
+                account_id: "acc-1",
+                subtransactions: [
+                  { id: "s1", amount: -3000, category_id: "groceries", category_name: "Groceries" },
+                  { id: "s2", amount: -2000, category_id: "household", category_name: "Household" },
+                ],
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      });
+    };
+
+    const out = JSON.parse(
+      await handleTool(ctxWith(fn), "create_transaction", {
+        account_id: "acc-1",
+        date: "2026-06-18",
+        amount: -5000,
+        category_id: null,
+        import_id: "YNAB:-5000:2026-06-18:1",
+        subtransactions: [
+          { amount: -3000, category_id: "groceries" },
+          { amount: -2000, category_id: "household" },
+        ],
+      }),
+    );
+
+    const sent: unknown = JSON.parse(calls[0] ?? "{}");
+    const parsed = z
+      .object({
+        transaction: z.object({
+          category_id: z.null(),
+          import_id: z.string(),
+          subtransactions: z.array(z.object({ amount: z.number(), category_id: z.string() })),
+        }),
+      })
+      .parse(sent);
+    expect(parsed.transaction.subtransactions).toEqual([
+      { amount: -3000, category_id: "groceries" },
+      { amount: -2000, category_id: "household" },
+    ]);
+    expect(out.subtransactions).toHaveLength(2);
+    expect(out.subtransactions[0].category).toBe("Groceries");
+  });
+
+  it("create_transaction rejects a split whose legs don't sum to the amount", async () => {
+    await expect(
+      handleTool(ctxWith(fetchReturning({})), "create_transaction", {
+        account_id: "acc-1",
+        date: "2026-06-18",
+        amount: -5000,
+        category_id: null,
+        subtransactions: [
+          { amount: -3000, category_id: "g" },
+          { amount: -1000, category_id: "h" },
+        ],
+      }),
+    ).rejects.toThrow(/sum/i);
   });
 
   it("spending_summary aggregates transactions by category", async () => {

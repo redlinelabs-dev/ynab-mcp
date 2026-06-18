@@ -7,6 +7,18 @@
 // "clear this field", e.g. uncategorize or remove a memo).
 // ============================================================================
 
+// One leg of a split transaction. `amount` is required (milliunits); the legs
+// must sum to the parent transaction's amount. YNAB only accepts these on
+// CREATE — the subtransaction set of an existing split cannot be edited via the
+// API (see ROADMAP).
+export interface SaveSubTxnFields {
+  amount: number;
+  payee_id?: string | null;
+  payee_name?: string | null;
+  category_id?: string | null;
+  memo?: string | null;
+}
+
 export interface SaveTxnFields {
   account_id?: string;
   date?: string;
@@ -18,17 +30,38 @@ export interface SaveTxnFields {
   cleared?: string;
   approved?: boolean;
   flag_color?: string | null;
+  import_id?: string | null;
+  // A split: set the parent `category_id` to null and provide the legs here.
+  subtransactions?: SaveSubTxnFields[];
 }
 
 export interface BulkTxnUpdate extends SaveTxnFields {
   id: string;
 }
 
-/** Build a save-transaction object, omitting keys whose value is `undefined`. */
-export function buildSaveTransaction(fields: SaveTxnFields): Record<string, unknown> {
+/** Build one subtransaction leg, omitting keys whose value is `undefined`. */
+function buildSaveSubtransaction(fields: SaveSubTxnFields): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Build a save-transaction object, omitting keys whose value is `undefined`
+ * (an explicit `null` is preserved). `subtransactions` legs are each cleaned the
+ * same way, so a split can be created in one call.
+ */
+export function buildSaveTransaction(fields: SaveTxnFields): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined) continue;
+    if (key === "subtransactions" && Array.isArray(value)) {
+      out[key] = value.map((sub) => buildSaveSubtransaction(sub));
+    } else {
+      out[key] = value;
+    }
   }
   return out;
 }

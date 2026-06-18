@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An MCP (Model Context Protocol) server for **YNAB** (You Need A Budget), published to npm as
 `@redlinelabs/ynab-mcp`. It exposes tools across the budget lifecycle — budgets, accounts,
-categories (incl. setting budgeted amounts), transactions (browse, create, update, bulk-update,
-delete, find-duplicates, import, spending analysis), months, payees, and scheduled transactions.
+categories (incl. setting budgeted amounts), transactions (browse, create incl. **splits**, update,
+bulk-update, delete, find-duplicates, import, spending analysis), months, payees, and scheduled
+transactions.
 Tools are grouped into **toolsets** (`budgets`, `accounts`, `categories`, `transactions`, `months`,
 `payees`, `scheduled`) that operators enable/disable via env to keep the model's context lean. It
 talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio via `@modelcontextprotocol/sdk`.

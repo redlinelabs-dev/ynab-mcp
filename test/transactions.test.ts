@@ -15,6 +15,38 @@ describe("buildSaveTransaction", () => {
 
     expect(body).toEqual({ category_id: null, memo: null });
   });
+
+  it("builds a split: parent category_id null + cleaned subtransaction legs", () => {
+    const body = buildSaveTransaction({
+      account_id: "acc-1",
+      amount: -5000,
+      category_id: null,
+      import_id: "YNAB:-5000:2026-06-18:1",
+      subtransactions: [
+        { amount: -3000, category_id: "groceries" },
+        { amount: -2000, category_id: "household", memo: "paper towels" },
+      ],
+    });
+
+    expect(body).toEqual({
+      account_id: "acc-1",
+      amount: -5000,
+      category_id: null,
+      import_id: "YNAB:-5000:2026-06-18:1",
+      subtransactions: [
+        { amount: -3000, category_id: "groceries" },
+        { amount: -2000, category_id: "household", memo: "paper towels" },
+      ],
+    });
+  });
+
+  it("omits undefined leg fields but keeps an explicit null in a leg", () => {
+    const body = buildSaveTransaction({
+      subtransactions: [{ amount: -1000, category_id: null, payee_name: undefined }],
+    });
+
+    expect(body).toEqual({ subtransactions: [{ amount: -1000, category_id: null }] });
+  });
 });
 
 describe("buildBulkTransactionsBody", () => {
