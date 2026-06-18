@@ -150,10 +150,12 @@ describe("access tokens", () => {
 });
 
 describe("refresh tokens", () => {
-  it("take rotates (one-time use)", () => {
+  it("get is non-consuming (reusable) until explicitly deleted", () => {
     const s = store();
     s.putRefreshToken({ tokenHash: "r1", grantId: "g1", clientId: "c1", scope: "ynab.read" });
-    expect(s.takeRefreshToken("r1")?.grantId).toBe("g1");
-    expect(s.takeRefreshToken("r1")).toBeUndefined();
+    expect(s.getRefreshToken("r1")?.grantId).toBe("g1");
+    expect(s.getRefreshToken("r1")?.grantId).toBe("g1"); // still there
+    s.deleteRefreshToken("r1");
+    expect(s.getRefreshToken("r1")).toBeUndefined();
   });
 });

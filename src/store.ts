@@ -347,7 +347,7 @@ export class Store {
     this.db.prepare("DELETE FROM access_tokens WHERE token_hash = ?").run(tokenHash);
   }
 
-  // --- Our issued refresh tokens (rotated on use) ---
+  // --- Our issued refresh tokens (non-rotating: stable for the grant's life) ---
   putRefreshToken(t: RefreshTokenRecord): void {
     this.db
       .prepare(
@@ -356,11 +356,14 @@ export class Store {
       .run(t.tokenHash, t.grantId, t.clientId, t.scope);
   }
 
-  takeRefreshToken(tokenHash: string): RefreshTokenRecord | undefined {
+  getRefreshToken(tokenHash: string): RefreshTokenRecord | undefined {
     const raw = this.db.prepare("SELECT * FROM refresh_tokens WHERE token_hash = ?").get(tokenHash);
-    this.db.prepare("DELETE FROM refresh_tokens WHERE token_hash = ?").run(tokenHash);
     if (raw === undefined) return undefined;
     const r = refreshRow.parse(raw);
     return { tokenHash: r.token_hash, grantId: r.grant_id, clientId: r.client_id, scope: r.scope };
+  }
+
+  deleteRefreshToken(tokenHash: string): void {
+    this.db.prepare("DELETE FROM refresh_tokens WHERE token_hash = ?").run(tokenHash);
   }
 }

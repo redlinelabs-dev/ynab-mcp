@@ -27,10 +27,10 @@ import { OAuthClientInformationFullSchema } from "@modelcontextprotocol/sdk/shar
 import type { FetchFn } from "./client.js";
 import type { OAuthConfig } from "./oauth-config.js";
 
-import { seal, sha256Hex, unseal } from "./encryption.js";
+import { seal, sha256Hex } from "./encryption.js";
 import { generatePkce } from "./pkce.js";
 import { Store } from "./store.js";
-import { exchangeYnabCode, fetchYnabUserId, refreshYnabToken } from "./ynab-oauth.js";
+import { exchangeYnabCode, fetchYnabUserId } from "./ynab-oauth.js";
 
 const TEN_MINUTES_MS = 600_000;
 const AUTH_CODE_TTL_MS = 60_000;
@@ -240,7 +240,12 @@ export class YnabOAuthProvider implements OAuthServerProvider {
     client: OAuthClientInformationFull,
     refreshToken: string,
   ): Promise<OAuthTokens> {
-    const row = this.store.takeRefreshToken(await sha256Hex(refreshToken));
+    // Non-rotating: look up (don't consume) the refresh token. A failed refresh
+    // must never void the client's long-lived refresh token — that's what made a
+    // single hiccup permanently break the connection. The upstream YNAB token is
+    // refreshed lazily in the /mcp handler on actual use (the single refresh site,
+    // so there's no rotation race against YNAB's own refresh-token rotation).
+    const row = this.store.getRefreshToken(await sha256Hex(refreshToken));
     if (!row) throw new InvalidGrantError("Refresh token is invalid");
     if (row.clientId !== client.client_id) {
       throw new InvalidGrantError("Refresh token was issued to another client");
@@ -248,19 +253,21 @@ export class YnabOAuthProvider implements OAuthServerProvider {
     const grant = this.store.getGrant(row.grantId);
     if (!grant) throw new InvalidGrantError("The grant for this token no longer exists");
 
-    const now = this.now();
-    // Keep the upstream YNAB token live alongside our refresh.
-    if (now >= grant.expiresAt - 60_000) {
-      const ynabRefresh = await unseal(this.encKey, grant.encRefresh);
-      const fresh = await refreshYnabToken(ynabRefresh, this.config, this.fetchFn);
-      this.store.updateGrantTokens(
-        grant.grantId,
-        await seal(this.encKey, fresh.accessToken),
-        await seal(this.encKey, fresh.refreshToken),
-        now + fresh.expiresIn * 1000,
-      );
-    }
-    return this.issueTokens(grant.grantId, row.clientId, row.scope);
+    const accessToken = crypto.randomUUID();
+    this.store.putAccessToken({
+      tokenHash: await sha256Hex(accessToken),
+      grantId: grant.grantId,
+      clientId: row.clientId,
+      scope: row.scope,
+      expiresAt: this.now() + this.accessTokenTtlSec * 1000,
+    });
+    return {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: this.accessTokenTtlSec,
+      refresh_token: refreshToken,
+      scope: row.scope,
+    };
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
@@ -281,7 +288,7 @@ export class YnabOAuthProvider implements OAuthServerProvider {
   ): Promise<void> {
     const hash = await sha256Hex(request.token);
     this.store.deleteAccessToken(hash);
-    this.store.takeRefreshToken(hash);
+    this.store.deleteRefreshToken(hash);
   }
 
   private async issueTokens(

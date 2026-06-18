@@ -190,30 +190,27 @@ describe("token issuance + verification", () => {
     await expect(p.exchangeAuthorizationCode(client, code)).rejects.toThrow();
   });
 
-  it("rotates the refresh token and refreshes the YNAB token when expired", async () => {
+  it("mints a fresh access token on refresh while keeping the refresh token reusable (non-rotating)", async () => {
     const store = new Store(":memory:");
     const calls: { url: string; body: string }[] = [];
     const p = provider(store, calls);
     const code = await completeAndGetCode(store, p, "full");
     const first = await p.exchangeAuthorizationCode(client, code);
 
-    // Force the grant to look expired so refresh triggers an upstream YNAB refresh.
-    const info = await p.verifyAccessToken(first.access_token);
-    const grantId = typeof info.extra?.["grantId"] === "string" ? info.extra["grantId"] : "";
-    store.updateGrantTokens(
-      grantId,
-      store.getGrant(grantId)?.encAccess ?? "",
-      store.getGrant(grantId)?.encRefresh ?? "",
-      NOW - 1,
-    );
+    const second = await p.exchangeRefreshToken(client, first.refresh_token ?? "");
+    // New access token, same (non-rotating) refresh token.
+    expect(second.access_token).not.toBe(first.access_token);
+    expect(second.refresh_token).toBe(first.refresh_token);
 
-    const refreshed = await p.exchangeRefreshToken(client, first.refresh_token ?? "");
-    expect(refreshed.access_token).not.toBe(first.access_token);
-    // A refresh_token grant call hit YNAB.
+    // The refresh endpoint never makes a YNAB refresh call — that happens lazily
+    // on /mcp use (the only calls are the authorization-code exchange from setup).
     expect(
       calls.some((c) => new URLSearchParams(c.body).get("grant_type") === "refresh_token"),
-    ).toBe(true);
-    // Old refresh token is now invalid (rotated).
-    await expect(p.exchangeRefreshToken(client, first.refresh_token ?? "")).rejects.toThrow();
+    ).toBe(false);
+
+    // The same refresh token still works afterward (a hiccup can't void it).
+    const third = await p.exchangeRefreshToken(client, first.refresh_token ?? "");
+    expect(third.access_token).not.toBe(second.access_token);
+    expect(await p.verifyAccessToken(third.access_token)).toBeDefined();
   });
 });
