@@ -15,14 +15,17 @@ import express from "express";
 import { z } from "zod";
 
 import type { OAuthConfig } from "./oauth-config.js";
+import type { ToolContext } from "./tools.js";
 import type { OAuthProps } from "./worker-config.js";
 
+import { YnabClient } from "./client.js";
 import { importKey, seal, unseal } from "./encryption.js";
 import { requireEnv } from "./env.js";
 import { buildMcpServer } from "./mcp-server.js";
 import { YNAB_AUTHORIZE_ENDPOINT, YNAB_TOKEN_ENDPOINT } from "./oauth-config.js";
 import { YnabOAuthProvider } from "./oauth-server.js";
 import { Store } from "./store.js";
+import { parseReadOnly, parseToolsets } from "./toolsets.js";
 import { makeToolContextFromProps } from "./worker-config.js";
 
 const ConsentForm = z.object({ pending: z.string(), scope: z.string().optional() });
@@ -55,6 +58,11 @@ async function main(): Promise<void> {
   };
   const databasePath = (process.env["DATABASE_PATH"] ?? "./data/ynab-mcp.db").trim();
   const port = Number(process.env["PORT"] ?? "8080");
+  // Opt-in: accept a YNAB Personal Access Token directly as the /mcp bearer (for
+  // headless/simple clients that just send `Authorization: Bearer <PAT>` — no
+  // OAuth flow). Off by default; the OAuth path is unaffected either way.
+  const allowPat = /^(true|1)$/i.test((process.env["YNAB_PAT_PASSTHROUGH"] ?? "").trim());
+  const patReadOnly = parseReadOnly(process.env["YNAB_READ_ONLY"]);
 
   const store = new Store(databasePath);
   const provider = new YnabOAuthProvider({
@@ -141,57 +149,102 @@ async function main(): Promise<void> {
       .catch((err: unknown) => res.status(500).send(errorText(err)));
   });
 
+  // OAuth bearer auth (standard path). When PAT pass-through is on, a bearer that
+  // isn't one of our OAuth tokens is treated as a YNAB PAT instead of a 401.
+  const bearer = requireBearerAuth({ verifier: provider, resourceMetadataUrl });
+  const mcpAuth: express.RequestHandler = !allowPat
+    ? bearer
+    : (req, res, next) => {
+        const header = req.headers.authorization ?? "";
+        const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+        if (!token) {
+          bearer(req, res, next);
+          return;
+        }
+        provider.verifyAccessToken(token).then(
+          () => bearer(req, res, next),
+          () => {
+            req.auth = {
+              token,
+              clientId: "pat",
+              scopes: ["ynab.read", "ynab.write"],
+              extra: { pat: token },
+            };
+            next();
+          },
+        );
+      };
+
   // The authenticated MCP endpoint (stateless Streamable HTTP, one transport per request).
-  app.all(
-    "/mcp",
-    requireBearerAuth({ verifier: provider, resourceMetadataUrl }),
-    express.json(),
-    (req, res) => {
-      handleMcp(provider, store, encKey, config, req, res).catch((err: unknown) => {
-        if (!res.headersSent) res.status(500).json({ error: errorText(err) });
-      });
-    },
-  );
+  app.all("/mcp", mcpAuth, express.json(), (req, res) => {
+    handleMcp({ provider, store, encKey, config, patReadOnly }, req, res).catch((err: unknown) => {
+      if (!res.headersSent) res.status(500).json({ error: errorText(err) });
+    });
+  });
 
   app.listen(port, () => {
     console.error(`YNAB MCP server listening on :${port} (public: ${publicUrl})`);
   });
 }
 
-async function handleMcp(
-  provider: YnabOAuthProvider,
-  store: Store,
-  encKey: CryptoKey,
-  config: OAuthConfig,
-  req: express.Request,
-  res: express.Response,
-): Promise<void> {
+interface McpDeps {
+  provider: YnabOAuthProvider;
+  store: Store;
+  encKey: CryptoKey;
+  config: OAuthConfig;
+  patReadOnly: boolean;
+}
+
+// Resolve the ToolContext for this request: a YNAB PAT passed straight through,
+// or the per-tenant OAuth grant (decrypted, refreshed-on-expiry, persisted).
+// Returns null and writes a 401 if neither is present.
+async function resolveContext(deps: McpDeps, req: express.Request, res: express.Response) {
+  const pat = req.auth?.extra?.["pat"];
+  if (typeof pat === "string") {
+    const ctx: ToolContext = {
+      client: new YnabClient(pat),
+      enabledGroups: parseToolsets("all"),
+      readOnly: deps.patReadOnly,
+      defaultBudget: "last-used",
+    };
+    return { ctx, note: "pat" };
+  }
+
   const grantId = req.auth?.extra?.["grantId"];
   if (typeof grantId !== "string") {
     res.status(401).json({ error: "No grant associated with token" });
-    return;
+    return null;
   }
-  const grant = store.getGrant(grantId);
+  const grant = deps.store.getGrant(grantId);
   if (!grant) {
     res.status(401).json({ error: "Grant no longer exists" });
-    return;
+    return null;
   }
-
   const props: OAuthProps = {
-    accessToken: await unseal(encKey, grant.encAccess),
-    refreshToken: await unseal(encKey, grant.encRefresh),
+    accessToken: await unseal(deps.encKey, grant.encAccess),
+    refreshToken: await unseal(deps.encKey, grant.encRefresh),
     expiresAt: grant.expiresAt,
     readOnly: grant.readOnly,
   };
-  const { ctx, refreshed } = await makeToolContextFromProps(props, config, fetch, Date.now());
+  const { ctx, refreshed } = await makeToolContextFromProps(props, deps.config, fetch, Date.now());
   if (refreshed) {
-    store.updateGrantTokens(
+    deps.store.updateGrantTokens(
       grantId,
-      await seal(encKey, refreshed.accessToken),
-      await seal(encKey, refreshed.refreshToken),
+      await seal(deps.encKey, refreshed.accessToken),
+      await seal(deps.encKey, refreshed.refreshToken),
       refreshed.expiresAt,
     );
   }
+  return { ctx, note: refreshed ? "grant(refreshed)" : "grant" };
+}
+
+async function handleMcp(
+  deps: McpDeps,
+  req: express.Request,
+  res: express.Response,
+): Promise<void> {
+  const resolved = await resolveContext(deps, req, res);
+  if (!resolved) return;
 
   // enableJsonResponse: reply with a single JSON body instead of an SSE stream —
   // SSE gets buffered by reverse proxies (e.g. Tailscale `serve`), which makes
@@ -200,8 +253,8 @@ async function handleMcp(
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
-  console.error(`[mcp] context ready (refreshed=${refreshed ? "yes" : "no"}) → transport`);
-  const server = buildMcpServer(ctx);
+  console.error(`[mcp] context ready (${resolved.note}) → transport`);
+  const server = buildMcpServer(resolved.ctx);
   res.on("close", () => {
     void transport.close();
     void server.close();

@@ -155,6 +155,21 @@ complete the browser prompt. For clients configured by JSON, it's usually:
 }
 ```
 
+**Headless clients without a browser** (e.g. an agent in a container) can skip OAuth entirely if you
+set `YNAB_PAT_PASSTHROUGH=true` on the server: then `/mcp` also accepts a **YNAB Personal Access
+Token** sent as a static bearer header — no flow, no expiry. In hermes that's just:
+
+```yaml
+mcp_servers:
+  ynab:
+    url: "https://ynab.your-tailnet.ts.net/mcp"
+    headers:
+      Authorization: "Bearer <your-YNAB-PAT>"
+```
+
+OAuth keeps working alongside it; the PAT path is per-request (each client uses its own token). Add
+`YNAB_READ_ONLY=true` on the server to gate the PAT path to read-only.
+
 ## Setup (local stdio server)
 
 This runs the server locally over stdio with a Personal Access Token — for single-user/dev use, or
