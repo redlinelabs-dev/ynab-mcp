@@ -10,7 +10,7 @@ categories (incl. setting budgeted amounts), transactions (browse, create incl. 
 bulk-update, delete, find-duplicates, import, spending analysis), months, payees, and scheduled
 transactions.
 Tools are grouped into **toolsets** (`budgets`, `accounts`, `categories`, `transactions`, `months`,
-`payees`, `scheduled`) that operators enable/disable via env to keep the model's context lean. It
+`payees`, `scheduled`, `money_movements`) that operators enable/disable via env to keep the model's context lean. It
 talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio via `@modelcontextprotocol/sdk`.
 
 > **Bank linking is impossible via the YNAB API** (app-only); `create_account` makes manual

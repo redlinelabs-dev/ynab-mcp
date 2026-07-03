@@ -42,6 +42,30 @@ describe("YnabClient", () => {
     expect(budgets.map((b) => b.id)).toEqual(["b1"]);
   });
 
+  it("GETs plans with include_accounts when requested", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: { budgets: [{ id: "b1", name: "My Budget", accounts: [] }], default_budget: null },
+    });
+    const client = new YnabClient("secret-token", fn);
+
+    await client.listBudgets({ include_accounts: true });
+
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets?include_accounts=true");
+  });
+
+  it("GETs a full budget export with server knowledge", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: { budget: { id: "b1", name: "My Budget", accounts: [] }, server_knowledge: 42 },
+    });
+    const client = new YnabClient("secret-token", fn);
+
+    const budget = await client.getBudget("b1", { last_knowledge_of_server: 21 });
+
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/b1?last_knowledge_of_server=21");
+    expect(budget.server_knowledge).toBe(42);
+    expect(budget.budget.id).toBe("b1");
+  });
+
   it("PATCHes a JSON body for bulk updates", async () => {
     const { fn, calls } = fakeFetch(200, {
       data: { transaction_ids: ["t1"], transactions: [], duplicate_import_ids: [] },
@@ -72,6 +96,38 @@ describe("YnabClient", () => {
     expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/budget-1/transactions/t9");
   });
 
+  it("GETs transactions with all supported query parameters", async () => {
+    const { fn, calls } = fakeFetch(200, { data: { transactions: [], server_knowledge: 11 } });
+    const client = new YnabClient("tok", fn);
+
+    await client.listTransactions("budget-1", {
+      since_date: "2026-01-01",
+      until_date: "2026-02-01",
+      type: "uncategorized",
+      last_knowledge_of_server: 7,
+    });
+
+    expect(calls[0]?.url).toBe(
+      "https://api.ynab.com/v1/budgets/budget-1/transactions?since_date=2026-01-01&until_date=2026-02-01&type=uncategorized&last_knowledge_of_server=7",
+    );
+  });
+
+  it("GETs payee transactions with until_date, type, and server knowledge", async () => {
+    const { fn, calls } = fakeFetch(200, { data: { transactions: [], server_knowledge: 12 } });
+    const client = new YnabClient("tok", fn);
+
+    await client.listPayeeTransactions("budget-1", "payee-1", {
+      since_date: "2026-01-01",
+      until_date: "2026-02-01",
+      type: "unapproved",
+      last_knowledge_of_server: 8,
+    });
+
+    expect(calls[0]?.url).toBe(
+      "https://api.ynab.com/v1/budgets/budget-1/payees/payee-1/transactions?since_date=2026-01-01&until_date=2026-02-01&type=unapproved&last_knowledge_of_server=8",
+    );
+  });
+
   it("throws on a non-2xx response, including the status and body", async () => {
     const { fn } = fakeFetch(429, { error: { detail: "Too many requests" } });
     const client = new YnabClient("tok", fn);
@@ -98,6 +154,47 @@ describe("YnabClient", () => {
     expect(calls[0]?.method).toBe("GET");
     expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/scheduled_transactions/s1");
     expect(s.id).toBe("s1");
+  });
+
+  it("POSTs a new payee", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      data: { payee: { id: "p1", name: "New Payee" } },
+    });
+    const client = new YnabClient("tok", fn);
+
+    const payee = await client.createPayee("bud-1", "New Payee");
+
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/payees");
+    expect(JSON.parse(calls[0]?.body ?? "null")).toEqual({ payee: { name: "New Payee" } });
+    expect(payee.id).toBe("p1");
+  });
+
+  it("GETs money movement resources", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: { money_movements: [{ id: "mm1", amount: 1000 }], server_knowledge: 5 },
+    });
+    const client = new YnabClient("tok", fn);
+
+    const out = await client.listMoneyMovements("bud-1");
+
+    expect(calls[0]?.url).toBe("https://api.ynab.com/v1/budgets/bud-1/money_movements");
+    expect(out.server_knowledge).toBe(5);
+    expect(out.money_movements[0]?.id).toBe("mm1");
+  });
+
+  it("GETs month money movement group resources", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      data: { money_movement_groups: [{ id: "mmg1", month: "2026-07-01" }], server_knowledge: 9 },
+    });
+    const client = new YnabClient("tok", fn);
+
+    const out = await client.listMonthMoneyMovementGroups("bud-1", "2026-07-01");
+
+    expect(calls[0]?.url).toBe(
+      "https://api.ynab.com/v1/budgets/bud-1/months/2026-07-01/money_movement_groups",
+    );
+    expect(out.money_movement_groups[0]?.id).toBe("mmg1");
   });
 
   it("POSTs a new scheduled transaction", async () => {

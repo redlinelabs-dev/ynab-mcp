@@ -14,6 +14,20 @@ export function dataEnvelope<T extends z.ZodTypeAny>(inner: T) {
   return z.object({ data: inner }).passthrough();
 }
 
+const AccountBaseSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().catch(""),
+    type: z.string().catch(""),
+    on_budget: z.boolean().catch(true),
+    closed: z.boolean().catch(false),
+    balance: z.number().catch(0),
+    cleared_balance: z.number().catch(0),
+    uncleared_balance: z.number().catch(0),
+    deleted: z.boolean().catch(false),
+  })
+  .passthrough();
+
 // --- Budget ---
 
 export const BudgetSummarySchema = z
@@ -28,6 +42,7 @@ export const BudgetSummarySchema = z
       .passthrough()
       .nullable()
       .catch(null),
+    accounts: z.array(AccountBaseSchema).optional().catch(undefined),
   })
   .passthrough();
 
@@ -63,21 +78,31 @@ export const BudgetSettingsResponseSchema = dataEnvelope(
   z.object({ settings: BudgetSettingsSchema }).passthrough(),
 );
 
+export const BudgetDetailSchema = BudgetSummarySchema.extend({
+  accounts: z.array(z.object({}).passthrough()).catch([]),
+  payees: z.array(z.object({}).passthrough()).catch([]),
+  payee_locations: z.array(z.object({}).passthrough()).catch([]),
+  category_groups: z.array(z.object({}).passthrough()).catch([]),
+  categories: z.array(z.object({}).passthrough()).catch([]),
+  months: z.array(z.object({}).passthrough()).catch([]),
+  transactions: z.array(z.object({}).passthrough()).catch([]),
+  subtransactions: z.array(z.object({}).passthrough()).catch([]),
+  scheduled_transactions: z.array(z.object({}).passthrough()).catch([]),
+  scheduled_subtransactions: z.array(z.object({}).passthrough()).catch([]),
+}).passthrough();
+
+export const BudgetDetailResponseSchema = dataEnvelope(
+  z
+    .object({
+      budget: BudgetDetailSchema,
+      server_knowledge: z.number().catch(0),
+    })
+    .passthrough(),
+);
+
 // --- Account ---
 
-export const AccountSchema = z
-  .object({
-    id: z.string(),
-    name: z.string().catch(""),
-    type: z.string().catch(""),
-    on_budget: z.boolean().catch(true),
-    closed: z.boolean().catch(false),
-    balance: z.number().catch(0),
-    cleared_balance: z.number().catch(0),
-    uncleared_balance: z.number().catch(0),
-    deleted: z.boolean().catch(false),
-  })
-  .passthrough();
+export const AccountSchema = z.object(AccountBaseSchema.shape).passthrough();
 
 export const AccountsResponseSchema = dataEnvelope(
   z.object({ accounts: z.array(AccountSchema).catch([]) }).passthrough(),
@@ -260,6 +285,50 @@ export const PayeesResponseSchema = dataEnvelope(
 
 export const PayeeResponseSchema = dataEnvelope(z.object({ payee: PayeeSchema }).passthrough());
 
+// --- Money movements ---
+
+export const MoneyMovementSchema = z
+  .object({
+    id: z.string(),
+    month: z.string().nullable().catch(null),
+    moved_at: z.string().nullable().catch(null),
+    note: z.string().nullable().catch(null),
+    money_movement_group_id: z.string().nullable().catch(null),
+    performed_by_user_id: z.string().nullable().catch(null),
+    from_category_id: z.string().nullable().catch(null),
+    to_category_id: z.string().nullable().catch(null),
+    amount: z.number().catch(0),
+  })
+  .passthrough();
+
+export const MoneyMovementsResponseSchema = dataEnvelope(
+  z
+    .object({
+      money_movements: z.array(MoneyMovementSchema).catch([]),
+      server_knowledge: z.number().catch(0),
+    })
+    .passthrough(),
+);
+
+export const MoneyMovementGroupSchema = z
+  .object({
+    id: z.string(),
+    group_created_at: z.string().nullable().catch(null),
+    month: z.string().catch(""),
+    note: z.string().nullable().catch(null),
+    performed_by_user_id: z.string().nullable().catch(null),
+  })
+  .passthrough();
+
+export const MoneyMovementGroupsResponseSchema = dataEnvelope(
+  z
+    .object({
+      money_movement_groups: z.array(MoneyMovementGroupSchema).catch([]),
+      server_knowledge: z.number().catch(0),
+    })
+    .passthrough(),
+);
+
 export const PayeeLocationSchema = z
   .object({
     id: z.string(),
@@ -296,3 +365,5 @@ export type MonthSummary = z.infer<typeof MonthSummarySchema>;
 export type Payee = z.infer<typeof PayeeSchema>;
 export type PayeeLocation = z.infer<typeof PayeeLocationSchema>;
 export type CategoryGroup = z.infer<typeof CategoryGroupSchema>;
+export type MoneyMovement = z.infer<typeof MoneyMovementSchema>;
+export type MoneyMovementGroup = z.infer<typeof MoneyMovementGroupSchema>;

@@ -19,10 +19,11 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 
 ### `budgets`
 
-| Tool              | Description                                  |
-| ----------------- | -------------------------------------------- |
-| `list_budgets`    | All budgets on the account                   |
-| `budget_settings` | Currency + date-format settings for a budget |
+| Tool              | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `list_budgets`    | All budgets on the account                    |
+| `get_budget`      | One full budget export, optionally as a delta |
+| `budget_settings` | Currency + date-format settings for a budget  |
 
 ### `accounts`
 
@@ -55,6 +56,11 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 | `spending_summary`            | Aggregate spend by category/payee over a date range                |
 | `payee_transactions`          | Transaction history for one payee                                  |
 | `category_transactions`       | Transaction history for one category                               |
+| `month_transactions`          | Transaction history for one budget month                           |
+| `list_money_movements`        | Money movements in a budget                                        |
+| `month_money_movements`       | Money movements for one budget month                               |
+| `list_money_movement_groups`  | Money movement groups in a budget                                  |
+| `month_money_movement_groups` | Money movement groups for one budget month                         |
 
 ### `scheduled`
 
@@ -71,9 +77,19 @@ Tools are organized into **toolsets** (groups) you can enable/disable — see
 
 ### `payees`
 
-| Tool          | Description        |
-| ------------- | ------------------ |
-| `list_payees` | Payees in a budget |
+| Tool              | Description        |
+| ----------------- | ------------------ |
+| `list_payees`     | Payees in a budget |
+| `create_payee` ✏️ | Create a payee     |
+
+### `money_movements`
+
+| Tool                          | Description                                |
+| ----------------------------- | ------------------------------------------ |
+| `list_money_movements`        | Money movements in a budget                |
+| `month_money_movements`       | Money movements for one budget month       |
+| `list_money_movement_groups`  | Money movement groups in a budget          |
+| `month_money_movement_groups` | Money movement groups for one budget month |
 
 ## Self-hosting the remote server (Docker)
 
@@ -239,7 +255,7 @@ To avoid bloating the model's context window, you can expose only the tool group
 independent controls:
 
 - **`YNAB_TOOLSETS`** — comma-separated group names, or `all` (default). Groups: `budgets`,
-  `accounts`, `categories`, `transactions`, `months`, `payees`, `scheduled`.
+  `accounts`, `categories`, `transactions`, `months`, `payees`, `scheduled`, `money_movements`.
 - **`YNAB_READ_ONLY`** — `true`/`1` exposes only non-mutating tools (drops every `✏️` tool).
 
 ```env

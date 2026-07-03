@@ -8,6 +8,8 @@ import type {
   Category,
   CategoryGroup,
   MonthSummary,
+  MoneyMovement,
+  MoneyMovementGroup,
   Payee,
   PayeeLocation,
   ScheduledTransaction,
@@ -18,6 +20,7 @@ import { units } from "./money.js";
 
 export function formatAccount(a: Account) {
   return {
+    ...a,
     id: a.id,
     name: a.name,
     type: a.type,
@@ -32,6 +35,7 @@ export function formatAccount(a: Account) {
 
 export function formatCategory(c: Category) {
   return {
+    ...c,
     id: c.id,
     name: c.name,
     group: c.category_group_name ?? c.category_group_id,
@@ -41,12 +45,14 @@ export function formatCategory(c: Category) {
     activity_units: units(c.activity),
     balance_units: units(c.balance),
     goal_type: c.goal_type,
+    goal_target_units: c.goal_target === null ? null : units(c.goal_target),
   };
 }
 
 export function formatTransaction(t: Transaction) {
   const legs = (t.subtransactions ?? []).filter((s) => !s.deleted);
   return {
+    ...t,
     id: t.id,
     date: t.date,
     amount: t.amount,
@@ -72,6 +78,7 @@ export function formatTransaction(t: Transaction) {
 
 export function formatScheduledTransaction(s: ScheduledTransaction) {
   return {
+    ...s,
     id: s.id,
     date_next: s.date_next,
     frequency: s.frequency,
@@ -86,6 +93,7 @@ export function formatScheduledTransaction(s: ScheduledTransaction) {
 
 export function formatMonth(m: MonthSummary) {
   return {
+    ...m,
     month: m.month,
     income_units: units(m.income),
     budgeted_units: units(m.budgeted),
@@ -97,13 +105,24 @@ export function formatMonth(m: MonthSummary) {
 }
 
 export function formatPayee(p: Payee) {
-  return { id: p.id, name: p.name, is_transfer: p.transfer_account_id !== null };
+  return { ...p, id: p.id, name: p.name, is_transfer: p.transfer_account_id !== null };
 }
 
 export function formatPayeeLocation(l: PayeeLocation) {
-  return { id: l.id, payee_id: l.payee_id, latitude: l.latitude, longitude: l.longitude };
+  return { ...l, id: l.id, payee_id: l.payee_id, latitude: l.latitude, longitude: l.longitude };
 }
 
 export function formatCategoryGroup(g: CategoryGroup) {
-  return { id: g.id, name: g.name, hidden: g.hidden };
+  return { ...g, id: g.id, name: g.name, hidden: g.hidden };
+}
+
+export function formatMoneyMovement(m: MoneyMovement) {
+  return {
+    ...m,
+    amount_units: units(m.amount),
+  };
+}
+
+export function formatMoneyMovementGroup(g: MoneyMovementGroup) {
+  return { ...g };
 }

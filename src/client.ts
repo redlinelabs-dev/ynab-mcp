@@ -15,6 +15,7 @@ import type { SaveTxnFields } from "./transactions.js";
 import {
   AccountResponseSchema,
   AccountsResponseSchema,
+  BudgetDetailResponseSchema,
   BudgetSettingsResponseSchema,
   BudgetsResponseSchema,
   BulkTransactionsResponseSchema,
@@ -24,6 +25,8 @@ import {
   ImportResponseSchema,
   MonthResponseSchema,
   MonthsResponseSchema,
+  MoneyMovementGroupsResponseSchema,
+  MoneyMovementsResponseSchema,
   PayeeLocationResponseSchema,
   PayeeLocationsResponseSchema,
   PayeeResponseSchema,
@@ -45,6 +48,9 @@ export interface SaveCategoryFields {
   name?: string;
   note?: string | null;
   category_group_id?: string;
+  goal_target?: number | null;
+  goal_target_date?: string | null;
+  goal_needs_whole_amount?: boolean | null;
 }
 
 export type FetchFn = typeof fetch;
@@ -54,12 +60,21 @@ export interface ListTransactionsOptions {
   since_date?: string;
   until_date?: string;
   type?: "uncategorized" | "unapproved";
+  last_knowledge_of_server?: number;
 }
 
 export interface CreateAccountInput {
   name: string;
   type: string;
   balance: number;
+}
+
+export interface DeltaOptions {
+  last_knowledge_of_server?: number;
+}
+
+export interface ListBudgetsOptions {
+  include_accounts?: boolean;
 }
 
 export class YnabClient {
@@ -101,11 +116,33 @@ export class YnabClient {
     return schema.parse(json);
   }
 
+  private query(params: Record<string, string | number | boolean | undefined>): string {
+    const out = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) out.set(key, String(value));
+    }
+    const qs = out.toString();
+    return qs ? `?${qs}` : "";
+  }
+
   // --- Budgets ---
 
-  async listBudgets() {
-    const data = await this.getTyped(BudgetsResponseSchema, "/budgets");
+  async listBudgets(opts: ListBudgetsOptions = {}) {
+    const data = await this.getTyped(
+      BudgetsResponseSchema,
+      `/budgets${this.query({ include_accounts: opts.include_accounts })}`,
+    );
     return data.data.budgets;
+  }
+
+  async getBudget(budget: string, opts: DeltaOptions = {}) {
+    const data = await this.getTyped(
+      BudgetDetailResponseSchema,
+      `/budgets/${budget}${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
+    );
+    return data.data;
   }
 
   async getBudgetSettings(budget: string) {
@@ -122,9 +159,18 @@ export class YnabClient {
 
   // --- Accounts ---
 
-  async listAccounts(budget: string) {
-    const data = await this.getTyped(AccountsResponseSchema, `/budgets/${budget}/accounts`);
-    return data.data.accounts;
+  async listAccounts(budget: string, opts: DeltaOptions = {}) {
+    const data = await this.getTyped(
+      AccountsResponseSchema,
+      `/budgets/${budget}/accounts${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
+    );
+    return {
+      accounts: data.data.accounts,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async getAccount(budget: string, accountId: string) {
@@ -147,9 +193,18 @@ export class YnabClient {
 
   // --- Categories ---
 
-  async listCategories(budget: string) {
-    const data = await this.getTyped(CategoriesResponseSchema, `/budgets/${budget}/categories`);
-    return data.data.category_groups;
+  async listCategories(budget: string, opts: DeltaOptions = {}) {
+    const data = await this.getTyped(
+      CategoriesResponseSchema,
+      `/budgets/${budget}/categories${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
+    );
+    return {
+      category_groups: data.data.category_groups,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async getCategory(budget: string, categoryId: string) {
@@ -221,16 +276,21 @@ export class YnabClient {
   // --- Transactions ---
 
   async listTransactions(budget: string, opts: ListTransactionsOptions = {}) {
-    const params = new URLSearchParams();
-    if (opts.since_date) params.set("since_date", opts.since_date);
-    if (opts.until_date) params.set("until_date", opts.until_date);
-    if (opts.type) params.set("type", opts.type);
-    const qs = params.toString() ? `?${params.toString()}` : "";
+    const qs = this.query({
+      since_date: opts.since_date,
+      until_date: opts.until_date,
+      type: opts.type,
+      last_knowledge_of_server: opts.last_knowledge_of_server,
+    });
     const path = opts.account_id
       ? `/budgets/${budget}/accounts/${opts.account_id}/transactions${qs}`
       : `/budgets/${budget}/transactions${qs}`;
     const data = await this.getTyped(TransactionsResponseSchema, path);
-    return data.data.transactions;
+    return {
+      transactions: data.data.transactions,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async getTransaction(budget: string, transactionId: string) {
@@ -298,15 +358,21 @@ export class YnabClient {
   }
 
   async listPayeeTransactions(budget: string, payeeId: string, opts: ListTransactionsOptions = {}) {
-    const params = new URLSearchParams();
-    if (opts.since_date) params.set("since_date", opts.since_date);
-    if (opts.until_date) params.set("until_date", opts.until_date);
-    const qs = params.toString() ? `?${params.toString()}` : "";
+    const qs = this.query({
+      since_date: opts.since_date,
+      until_date: opts.until_date,
+      type: opts.type,
+      last_knowledge_of_server: opts.last_knowledge_of_server,
+    });
     const data = await this.getTyped(
       TransactionsResponseSchema,
       `/budgets/${budget}/payees/${payeeId}/transactions${qs}`,
     );
-    return data.data.transactions;
+    return {
+      transactions: data.data.transactions,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async listCategoryTransactions(
@@ -314,36 +380,55 @@ export class YnabClient {
     categoryId: string,
     opts: ListTransactionsOptions = {},
   ) {
-    const params = new URLSearchParams();
-    if (opts.since_date) params.set("since_date", opts.since_date);
-    if (opts.until_date) params.set("until_date", opts.until_date);
-    const qs = params.toString() ? `?${params.toString()}` : "";
+    const qs = this.query({
+      since_date: opts.since_date,
+      until_date: opts.until_date,
+      type: opts.type,
+      last_knowledge_of_server: opts.last_knowledge_of_server,
+    });
     const data = await this.getTyped(
       TransactionsResponseSchema,
       `/budgets/${budget}/categories/${categoryId}/transactions${qs}`,
     );
-    return data.data.transactions;
+    return {
+      transactions: data.data.transactions,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async listMonthTransactions(budget: string, month: string, opts: ListTransactionsOptions = {}) {
-    const params = new URLSearchParams();
-    if (opts.since_date) params.set("since_date", opts.since_date);
-    const qs = params.toString() ? `?${params.toString()}` : "";
+    const qs = this.query({
+      since_date: opts.since_date,
+      until_date: opts.until_date,
+      type: opts.type,
+      last_knowledge_of_server: opts.last_knowledge_of_server,
+    });
     const data = await this.getTyped(
       TransactionsResponseSchema,
       `/budgets/${budget}/months/${month}/transactions${qs}`,
     );
-    return data.data.transactions;
+    return {
+      transactions: data.data.transactions,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   // --- Scheduled transactions ---
 
-  async listScheduledTransactions(budget: string) {
+  async listScheduledTransactions(budget: string, opts: DeltaOptions = {}) {
     const data = await this.getTyped(
       ScheduledTransactionsResponseSchema,
-      `/budgets/${budget}/scheduled_transactions`,
+      `/budgets/${budget}/scheduled_transactions${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
     );
-    return data.data.scheduled_transactions;
+    return {
+      scheduled_transactions: data.data.scheduled_transactions,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async getScheduledTransaction(budget: string, scheduledTransactionId: string) {
@@ -389,9 +474,18 @@ export class YnabClient {
 
   // --- Months ---
 
-  async listMonths(budget: string) {
-    const data = await this.getTyped(MonthsResponseSchema, `/budgets/${budget}/months`);
-    return data.data.months;
+  async listMonths(budget: string, opts: DeltaOptions = {}) {
+    const data = await this.getTyped(
+      MonthsResponseSchema,
+      `/budgets/${budget}/months${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
+    );
+    return {
+      months: data.data.months,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
   }
 
   async getMonth(budget: string, month: string) {
@@ -401,9 +495,25 @@ export class YnabClient {
 
   // --- Payees ---
 
-  async listPayees(budget: string) {
-    const data = await this.getTyped(PayeesResponseSchema, `/budgets/${budget}/payees`);
-    return data.data.payees;
+  async listPayees(budget: string, opts: DeltaOptions = {}) {
+    const data = await this.getTyped(
+      PayeesResponseSchema,
+      `/budgets/${budget}/payees${this.query({
+        last_knowledge_of_server: opts.last_knowledge_of_server,
+      })}`,
+    );
+    return {
+      payees: data.data.payees,
+      server_knowledge:
+        typeof data.data.server_knowledge === "number" ? data.data.server_knowledge : undefined,
+    };
+  }
+
+  async createPayee(budget: string, name: string) {
+    const data = await this.sendTyped("POST", PayeeResponseSchema, `/budgets/${budget}/payees`, {
+      payee: { name },
+    });
+    return data.data.payee;
   }
 
   async getPayee(budget: string, payeeId: string) {
@@ -445,5 +555,39 @@ export class YnabClient {
       `/budgets/${budget}/payees/${payeeId}/payee_locations`,
     );
     return data.data.payee_locations;
+  }
+
+  // --- Money movements ---
+
+  async listMoneyMovements(budget: string) {
+    const data = await this.getTyped(
+      MoneyMovementsResponseSchema,
+      `/budgets/${budget}/money_movements`,
+    );
+    return data.data;
+  }
+
+  async listMonthMoneyMovements(budget: string, month: string) {
+    const data = await this.getTyped(
+      MoneyMovementsResponseSchema,
+      `/budgets/${budget}/months/${month}/money_movements`,
+    );
+    return data.data;
+  }
+
+  async listMoneyMovementGroups(budget: string) {
+    const data = await this.getTyped(
+      MoneyMovementGroupsResponseSchema,
+      `/budgets/${budget}/money_movement_groups`,
+    );
+    return data.data;
+  }
+
+  async listMonthMoneyMovementGroups(budget: string, month: string) {
+    const data = await this.getTyped(
+      MoneyMovementGroupsResponseSchema,
+      `/budgets/${budget}/months/${month}/money_movement_groups`,
+    );
+    return data.data;
   }
 }

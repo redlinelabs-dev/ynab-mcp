@@ -14,7 +14,8 @@ export type ToolGroup =
   | "transactions"
   | "months"
   | "payees"
-  | "scheduled";
+  | "scheduled"
+  | "money_movements";
 
 export const ALL_GROUPS: ToolGroup[] = [
   "budgets",
@@ -24,6 +25,7 @@ export const ALL_GROUPS: ToolGroup[] = [
   "months",
   "payees",
   "scheduled",
+  "money_movements",
 ];
 
 export function isToolGroup(s: string): s is ToolGroup {

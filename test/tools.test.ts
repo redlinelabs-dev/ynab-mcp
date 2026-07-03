@@ -148,6 +148,15 @@ describe("handleTool", () => {
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ payee: { name: "Costco" } });
   });
 
+  it("create_payee POSTs a payee name", async () => {
+    const { fn, calls } = capturingFetch({ data: { payee: { id: "p2", name: "Trader Joe's" } } });
+    const out = JSON.parse(await handleTool(ctxWith(fn), "create_payee", { name: "Trader Joe's" }));
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.url).toContain("/payees");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ payee: { name: "Trader Joe's" } });
+    expect(out.name).toBe("Trader Joe's");
+  });
+
   it("update_category moves a category to another group (category_group_id)", async () => {
     const { fn, calls } = capturingFetch({ data: { category: { id: "c1", name: "Rent" } } });
     await handleTool(ctxWith(fn), "update_category", {
@@ -159,6 +168,101 @@ describe("handleTool", () => {
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
       category: { category_group_id: "grp-2" },
     });
+  });
+
+  it("create_category accepts official goal fields", async () => {
+    const { fn, calls } = capturingFetch({
+      data: { category: { id: "c2", name: "Vacation", goal_target: 500000 } },
+    });
+    await handleTool(ctxWith(fn), "create_category", {
+      name: "Vacation",
+      category_group_id: "grp-1",
+      goal_target: 500000,
+      goal_target_date: "2026-12-01",
+      goal_needs_whole_amount: true,
+    });
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      category: {
+        name: "Vacation",
+        category_group_id: "grp-1",
+        goal_target: 500000,
+        goal_target_date: "2026-12-01",
+        goal_needs_whole_amount: true,
+      },
+    });
+  });
+
+  it("get_budget returns the full budget export", async () => {
+    const out = JSON.parse(
+      await handleTool(
+        ctxWith(
+          fetchReturning({ data: { budget: { id: "b1", accounts: [] }, server_knowledge: 17 } }),
+        ),
+        "get_budget",
+        { last_knowledge_of_server: 12 },
+      ),
+    );
+
+    expect(out.server_knowledge).toBe(17);
+    expect(out.budget.id).toBe("b1");
+  });
+
+  it("list_budgets passes include_accounts through", async () => {
+    const { fn, calls } = capturingFetch({
+      data: { budgets: [{ id: "b1", name: "Budget 1", accounts: [] }], default_budget: null },
+    });
+    await handleTool(ctxWith(fn), "list_budgets", { include_accounts: true });
+    expect(calls[0]?.url).toContain("/budgets?include_accounts=true");
+  });
+
+  it("payee_transactions passes until_date and type filters", async () => {
+    const { fn, calls } = capturingFetch({ data: { transactions: [] } });
+    await handleTool(ctxWith(fn), "payee_transactions", {
+      payee_id: "p1",
+      since_date: "2026-01-01",
+      until_date: "2026-01-31",
+      type: "uncategorized",
+    });
+    expect(calls[0]?.url).toContain(
+      "/payees/p1/transactions?since_date=2026-01-01&until_date=2026-01-31&type=uncategorized",
+    );
+  });
+
+  it("list_money_movements returns money movement rows with server knowledge", async () => {
+    const out = JSON.parse(
+      await handleTool(
+        ctxWith(
+          fetchReturning({
+            data: { money_movements: [{ id: "mm1", amount: 1000 }], server_knowledge: 3 },
+          }),
+        ),
+        "list_money_movements",
+        {},
+      ),
+    );
+
+    expect(out.server_knowledge).toBe(3);
+    expect(out.money_movements[0]).toMatchObject({ id: "mm1", amount: 1000, amount_units: 1 });
+  });
+
+  it("month_money_movement_groups returns money movement groups", async () => {
+    const out = JSON.parse(
+      await handleTool(
+        ctxWith(
+          fetchReturning({
+            data: {
+              money_movement_groups: [{ id: "mmg1", month: "2026-07-01", note: "Rebalance" }],
+              server_knowledge: 4,
+            },
+          }),
+        ),
+        "month_money_movement_groups",
+        { month: "2026-07-01" },
+      ),
+    );
+
+    expect(out.server_knowledge).toBe(4);
+    expect(out.money_movement_groups[0]?.id).toBe("mmg1");
   });
 
   it("bulk_create_transactions POSTs an array and summarizes the result", async () => {

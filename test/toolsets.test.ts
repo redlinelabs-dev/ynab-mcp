@@ -15,6 +15,10 @@ describe("parseToolsets", () => {
       "transactions",
     ]);
   });
+
+  it("supports the money_movements toolset", () => {
+    expect([...parseToolsets("money_movements")]).toEqual(["money_movements"]);
+  });
 });
 
 describe("parseReadOnly", () => {

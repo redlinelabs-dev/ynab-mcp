@@ -22,6 +22,8 @@ import {
   formatCategory,
   formatCategoryGroup,
   formatMonth,
+  formatMoneyMovement,
+  formatMoneyMovementGroup,
   formatPayee,
   formatPayeeLocation,
   formatScheduledTransaction,
@@ -50,6 +52,8 @@ export interface ToolDef {
 // ---------------------------------------------------------------------------
 
 const BudgetArg = z.object({ budget_id: z.string().optional() }).passthrough();
+const BudgetDeltaArg = BudgetArg.extend({ last_knowledge_of_server: z.number().optional() });
+const ListBudgetsInput = z.object({ include_accounts: z.boolean().optional() }).passthrough();
 const AccountRef = BudgetArg.extend({ account_id: z.string() });
 const CategoryRef = BudgetArg.extend({ category_id: z.string() });
 const TransactionRef = BudgetArg.extend({ transaction_id: z.string() });
@@ -62,7 +66,9 @@ const cleared = z.enum(["cleared", "uncleared", "reconciled"]);
 const ListTransactionsInput = BudgetArg.extend({
   account_id: z.string().optional(),
   since_date: z.string().optional(),
+  until_date: z.string().optional(),
   type: z.enum(["uncategorized", "unapproved"]).optional(),
+  last_knowledge_of_server: z.number().optional(),
   max_results: z.number().default(50),
 });
 
@@ -149,13 +155,29 @@ const SpendingSummaryInput = BudgetArg.extend({
   until_date: z.string().optional(),
 });
 
-const PayeeTxnsInput = PayeeRef.extend({ since_date: z.string().optional() });
-const CategoryTxnsInput = CategoryRef.extend({ since_date: z.string().optional() });
+const PayeeTxnsInput = PayeeRef.extend({
+  since_date: z.string().optional(),
+  until_date: z.string().optional(),
+  type: z.enum(["uncategorized", "unapproved"]).optional(),
+  last_knowledge_of_server: z.number().optional(),
+});
+const CategoryTxnsInput = CategoryRef.extend({
+  since_date: z.string().optional(),
+  until_date: z.string().optional(),
+  type: z.enum(["uncategorized", "unapproved"]).optional(),
+  last_knowledge_of_server: z.number().optional(),
+});
 
 const UpdatePayeeInput = PayeeRef.extend({ name: z.string() });
+const CreatePayeeInput = BudgetArg.extend({ name: z.string() });
 const PayeeLocationRef = BudgetArg.extend({ payee_location_id: z.string() });
 const MonthCategoryRef = MonthRef.extend({ category_id: z.string() });
-const MonthTxnsInput = MonthRef.extend({ since_date: z.string().optional() });
+const MonthTxnsInput = MonthRef.extend({
+  since_date: z.string().optional(),
+  until_date: z.string().optional(),
+  type: z.enum(["uncategorized", "unapproved"]).optional(),
+  last_knowledge_of_server: z.number().optional(),
+});
 
 const BulkCreateItem = z.object({
   account_id: z.string(),
@@ -167,11 +189,20 @@ const BulkCreateItem = z.object({
 });
 const BulkCreateInput = BudgetArg.extend({ transactions: z.array(BulkCreateItem).min(1) });
 
-const CreateCategoryInput = BudgetArg.extend({ name: z.string(), category_group_id: z.string() });
+const CreateCategoryInput = BudgetArg.extend({
+  name: z.string(),
+  category_group_id: z.string(),
+  goal_target: z.number().nullable().optional(),
+  goal_target_date: z.string().nullable().optional(),
+  goal_needs_whole_amount: z.boolean().nullable().optional(),
+});
 const UpdateCategoryInput = CategoryRef.extend({
   name: z.string().optional(),
   note: z.string().nullable().optional(),
   category_group_id: z.string().optional(),
+  goal_target: z.number().nullable().optional(),
+  goal_target_date: z.string().nullable().optional(),
+  goal_needs_whole_amount: z.boolean().nullable().optional(),
 });
 const CreateCategoryGroupInput = BudgetArg.extend({ name: z.string() });
 const UpdateCategoryGroupInput = BudgetArg.extend({
@@ -220,6 +251,8 @@ const UpdateScheduledTxnInput = ScheduledTxnRef.extend({
   ...ScheduledOptionalShape,
 });
 
+const MoneyMovementMonthInput = MonthRef;
+
 // ---------------------------------------------------------------------------
 // Tool definitions (JSON schemas for the wire)
 // ---------------------------------------------------------------------------
@@ -258,7 +291,28 @@ export const TOOLS: ToolDef[] = [
     group: "budgets",
     write: false,
     description: "List all budgets on the account (id, name, currency, date range).",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        include_accounts: {
+          type: "boolean",
+          description: "Include account summaries in each budget.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_budget",
+    group: "budgets",
+    write: false,
+    description: "Get one full budget export, optionally as a delta from server knowledge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        last_knowledge_of_server: { type: "number" },
+      },
+    },
   },
   {
     name: "budget_settings",
@@ -272,7 +326,10 @@ export const TOOLS: ToolDef[] = [
     group: "accounts",
     write: false,
     description: "List accounts in a budget with balances (milliunits + units).",
-    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, last_knowledge_of_server: { type: "number" } },
+    },
   },
   {
     name: "get_account",
@@ -310,7 +367,10 @@ export const TOOLS: ToolDef[] = [
     group: "categories",
     write: false,
     description: "List category groups and their categories (budgeted, activity, balance).",
-    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, last_knowledge_of_server: { type: "number" } },
+    },
   },
   {
     name: "get_category",
@@ -351,7 +411,9 @@ export const TOOLS: ToolDef[] = [
         ...budgetIdProp,
         account_id: { type: "string" },
         since_date: { type: "string" },
+        until_date: { type: "string" },
         type: { type: "string", enum: ["uncategorized", "unapproved"] },
+        last_knowledge_of_server: { type: "number" },
         max_results: { type: "number", default: 50 },
       },
     },
@@ -493,7 +555,14 @@ export const TOOLS: ToolDef[] = [
     description: "Transaction history for one payee (drill-down for spending habits).",
     inputSchema: {
       type: "object",
-      properties: { ...budgetIdProp, payee_id: { type: "string" }, since_date: { type: "string" } },
+      properties: {
+        ...budgetIdProp,
+        payee_id: { type: "string" },
+        since_date: { type: "string" },
+        until_date: { type: "string" },
+        type: { type: "string", enum: ["uncategorized", "unapproved"] },
+        last_knowledge_of_server: { type: "number" },
+      },
       required: ["payee_id"],
     },
   },
@@ -508,6 +577,9 @@ export const TOOLS: ToolDef[] = [
         ...budgetIdProp,
         category_id: { type: "string" },
         since_date: { type: "string" },
+        until_date: { type: "string" },
+        type: { type: "string", enum: ["uncategorized", "unapproved"] },
+        last_knowledge_of_server: { type: "number" },
       },
       required: ["category_id"],
     },
@@ -517,7 +589,10 @@ export const TOOLS: ToolDef[] = [
     group: "months",
     write: false,
     description: "List budget months with income/budgeted/activity/to-be-budgeted summaries.",
-    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, last_knowledge_of_server: { type: "number" } },
+    },
   },
   {
     name: "get_month",
@@ -537,14 +612,31 @@ export const TOOLS: ToolDef[] = [
     group: "payees",
     write: false,
     description: "List payees in a budget.",
-    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, last_knowledge_of_server: { type: "number" } },
+    },
+  },
+  {
+    name: "create_payee",
+    group: "payees",
+    write: true,
+    description: "Create a payee.",
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, name: { type: "string" } },
+      required: ["name"],
+    },
   },
   {
     name: "list_scheduled_transactions",
     group: "scheduled",
     write: false,
     description: "List scheduled (recurring/upcoming) transactions with next date and frequency.",
-    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+    inputSchema: {
+      type: "object",
+      properties: { ...budgetIdProp, last_knowledge_of_server: { type: "number" } },
+    },
   },
   {
     name: "get_scheduled_transaction",
@@ -739,6 +831,9 @@ export const TOOLS: ToolDef[] = [
         ...budgetIdProp,
         name: { type: "string" },
         category_group_id: { type: "string" },
+        goal_target: { type: "number" },
+        goal_target_date: { type: "string" },
+        goal_needs_whole_amount: { type: "boolean" },
       },
       required: ["name", "category_group_id"],
     },
@@ -757,6 +852,9 @@ export const TOOLS: ToolDef[] = [
         name: { type: "string" },
         note: { type: "string" },
         category_group_id: { type: "string", description: "Move the category into this group." },
+        goal_target: { type: "number" },
+        goal_target_date: { type: "string" },
+        goal_needs_whole_amount: { type: "boolean" },
       },
       required: ["category_id"],
     },
@@ -798,6 +896,49 @@ export const TOOLS: ToolDef[] = [
         ...budgetIdProp,
         month: { type: "string", description: 'ISO month or "current". Defaults to current.' },
         since_date: { type: "string" },
+        until_date: { type: "string" },
+        type: { type: "string", enum: ["uncategorized", "unapproved"] },
+        last_knowledge_of_server: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "list_money_movements",
+    group: "money_movements",
+    write: false,
+    description: "List money movements in a budget.",
+    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+  },
+  {
+    name: "month_money_movements",
+    group: "money_movements",
+    write: false,
+    description: "List money movements for a specific budget month.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        month: { type: "string", description: 'ISO month or "current". Defaults to current.' },
+      },
+    },
+  },
+  {
+    name: "list_money_movement_groups",
+    group: "money_movements",
+    write: false,
+    description: "List money movement groups in a budget.",
+    inputSchema: { type: "object", properties: { ...budgetIdProp } },
+  },
+  {
+    name: "month_money_movement_groups",
+    group: "money_movements",
+    write: false,
+    description: "List money movement groups for a specific budget month.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...budgetIdProp,
+        month: { type: "string", description: 'ISO month or "current". Defaults to current.' },
       },
     },
   },
@@ -851,6 +992,16 @@ function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function withServerKnowledge<T>(
+  lastKnowledge: number | undefined,
+  serverKnowledge: number | undefined,
+  key: string,
+  rows: T,
+): T | { server_knowledge: number | undefined; [k: string]: unknown } {
+  if (lastKnowledge === undefined) return rows;
+  return { server_knowledge: serverKnowledge, [key]: rows };
+}
+
 export async function handleTool(
   ctx: ToolContext,
   name: string,
@@ -867,15 +1018,26 @@ export async function handleTool(
 
   switch (name) {
     case "list_budgets": {
-      const budgets = await client.listBudgets();
+      const args = ListBudgetsInput.parse(rawArgs);
+      const budgets = await client.listBudgets({
+        ...(args.include_accounts !== undefined && { include_accounts: args.include_accounts }),
+      });
       return json(
         budgets.map((b) => ({
-          id: b.id,
-          name: b.name,
           currency: b.currency_format?.iso_code ?? "",
-          first_month: b.first_month,
-          last_month: b.last_month,
+          ...b,
+          ...(Array.isArray(b.accounts) ? { accounts: b.accounts.map(formatAccount) } : {}),
         })),
+      );
+    }
+    case "get_budget": {
+      const args = BudgetDeltaArg.parse(rawArgs);
+      return json(
+        await client.getBudget(budget(args), {
+          ...(args.last_knowledge_of_server !== undefined && {
+            last_knowledge_of_server: args.last_knowledge_of_server,
+          }),
+        }),
       );
     }
     case "budget_settings": {
@@ -883,9 +1045,20 @@ export async function handleTool(
       return json(await client.getBudgetSettings(budget(args)));
     }
     case "list_accounts": {
-      const args = BudgetArg.parse(rawArgs);
-      const accounts = await client.listAccounts(budget(args));
-      return json(accounts.filter((a) => !a.deleted).map(formatAccount));
+      const args = BudgetDeltaArg.parse(rawArgs);
+      const result = await client.listAccounts(budget(args), {
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
+      });
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "accounts",
+          result.accounts.filter((a) => !a.deleted).map(formatAccount),
+        ),
+      );
     }
     case "get_account": {
       const args = AccountRef.parse(rawArgs);
@@ -901,15 +1074,25 @@ export async function handleTool(
       return json(formatAccount(account));
     }
     case "list_categories": {
-      const args = BudgetArg.parse(rawArgs);
-      const groups = await client.listCategories(budget(args));
+      const args = BudgetDeltaArg.parse(rawArgs);
+      const result = await client.listCategories(budget(args), {
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
+      });
       return json(
-        groups
-          .filter((g) => !g.deleted && !g.hidden)
-          .map((g) => ({
-            group: g.name,
-            categories: g.categories.filter((c) => !c.deleted && !c.hidden).map(formatCategory),
-          })),
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "category_groups",
+          result.category_groups
+            .filter((g) => !g.deleted && !g.hidden)
+            .map((g) => ({
+              ...formatCategoryGroup(g),
+              group: g.name,
+              categories: g.categories.filter((c) => !c.deleted && !c.hidden).map(formatCategory),
+            })),
+        ),
       );
     }
     case "get_category": {
@@ -928,16 +1111,29 @@ export async function handleTool(
     }
     case "list_transactions": {
       const args = ListTransactionsInput.parse(rawArgs);
-      const txns = await client.listTransactions(budget(args), {
+      const result = await client.listTransactions(budget(args), {
         ...(args.account_id !== undefined && { account_id: args.account_id }),
         ...(args.since_date !== undefined && { since_date: args.since_date }),
+        ...(args.until_date !== undefined && { until_date: args.until_date }),
         ...(args.type !== undefined && { type: args.type }),
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
       });
-      const out = txns
+      const out = result.transactions
         .filter((t) => !t.deleted)
         .slice(-args.max_results)
         .map(formatTransaction);
-      return out.length > 0 ? json(out) : "No transactions found.";
+      return out.length > 0
+        ? json(
+            withServerKnowledge(
+              args.last_knowledge_of_server,
+              result.server_knowledge,
+              "transactions",
+              out,
+            ),
+          )
+        : "No transactions found.";
     }
     case "get_transaction": {
       const args = TransactionRef.parse(rawArgs);
@@ -973,11 +1169,11 @@ export async function handleTool(
     }
     case "find_duplicate_transactions": {
       const args = FindDuplicatesInput.parse(rawArgs);
-      const txns = await client.listTransactions(budget(args), {
+      const result = await client.listTransactions(budget(args), {
         ...(args.account_id !== undefined && { account_id: args.account_id }),
         ...(args.since_date !== undefined && { since_date: args.since_date }),
       });
-      const candidates: DupTxn[] = txns
+      const candidates: DupTxn[] = result.transactions
         .filter((t) => !t.deleted)
         .map((t) => ({
           id: t.id,
@@ -997,12 +1193,12 @@ export async function handleTool(
     }
     case "spending_summary": {
       const args = SpendingSummaryInput.parse(rawArgs);
-      const txns = await client.listTransactions(budget(args), {
+      const result = await client.listTransactions(budget(args), {
         ...(args.account_id !== undefined && { account_id: args.account_id }),
         ...(args.since_date !== undefined && { since_date: args.since_date }),
         ...(args.until_date !== undefined && { until_date: args.until_date }),
       });
-      const summaryTxns: SummaryTxn[] = txns
+      const summaryTxns: SummaryTxn[] = result.transactions
         .filter((t) => !t.deleted)
         .map((t) => ({
           amount: t.amount,
@@ -1013,22 +1209,57 @@ export async function handleTool(
     }
     case "payee_transactions": {
       const args = PayeeTxnsInput.parse(rawArgs);
-      const txns = await client.listPayeeTransactions(budget(args), args.payee_id, {
+      const result = await client.listPayeeTransactions(budget(args), args.payee_id, {
         ...(args.since_date !== undefined && { since_date: args.since_date }),
+        ...(args.until_date !== undefined && { until_date: args.until_date }),
+        ...(args.type !== undefined && { type: args.type }),
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
       });
-      return json(txns.filter((t) => !t.deleted).map(formatTransaction));
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "transactions",
+          result.transactions.filter((t) => !t.deleted).map(formatTransaction),
+        ),
+      );
     }
     case "category_transactions": {
       const args = CategoryTxnsInput.parse(rawArgs);
-      const txns = await client.listCategoryTransactions(budget(args), args.category_id, {
+      const result = await client.listCategoryTransactions(budget(args), args.category_id, {
         ...(args.since_date !== undefined && { since_date: args.since_date }),
+        ...(args.until_date !== undefined && { until_date: args.until_date }),
+        ...(args.type !== undefined && { type: args.type }),
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
       });
-      return json(txns.filter((t) => !t.deleted).map(formatTransaction));
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "transactions",
+          result.transactions.filter((t) => !t.deleted).map(formatTransaction),
+        ),
+      );
     }
     case "list_months": {
-      const args = BudgetArg.parse(rawArgs);
-      const months = await client.listMonths(budget(args));
-      return json(months.filter((m) => !m.deleted).map(formatMonth));
+      const args = BudgetDeltaArg.parse(rawArgs);
+      const result = await client.listMonths(budget(args), {
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
+      });
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "months",
+          result.months.filter((m) => !m.deleted).map(formatMonth),
+        ),
+      );
     }
     case "get_month": {
       const args = MonthRef.parse(rawArgs);
@@ -1039,14 +1270,40 @@ export async function handleTool(
       });
     }
     case "list_payees": {
-      const args = BudgetArg.parse(rawArgs);
-      const payees = await client.listPayees(budget(args));
-      return json(payees.filter((p) => !p.deleted).map(formatPayee));
+      const args = BudgetDeltaArg.parse(rawArgs);
+      const result = await client.listPayees(budget(args), {
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
+      });
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "payees",
+          result.payees.filter((p) => !p.deleted).map(formatPayee),
+        ),
+      );
+    }
+    case "create_payee": {
+      const args = CreatePayeeInput.parse(rawArgs);
+      return json(formatPayee(await client.createPayee(budget(args), args.name)));
     }
     case "list_scheduled_transactions": {
-      const args = BudgetArg.parse(rawArgs);
-      const scheduled = await client.listScheduledTransactions(budget(args));
-      return json(scheduled.filter((s) => !s.deleted).map(formatScheduledTransaction));
+      const args = BudgetDeltaArg.parse(rawArgs);
+      const result = await client.listScheduledTransactions(budget(args), {
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
+      });
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "scheduled_transactions",
+          result.scheduled_transactions.filter((s) => !s.deleted).map(formatScheduledTransaction),
+        ),
+      );
     }
     case "get_scheduled_transaction": {
       const args = ScheduledTxnRef.parse(rawArgs);
@@ -1134,6 +1391,9 @@ export async function handleTool(
       const category = await client.createCategory(budget(args), {
         name: args.name,
         category_group_id: args.category_group_id,
+        goal_target: args.goal_target,
+        goal_target_date: args.goal_target_date,
+        goal_needs_whole_amount: args.goal_needs_whole_amount,
       });
       return json(formatCategory(category));
     }
@@ -1143,6 +1403,9 @@ export async function handleTool(
         name: args.name,
         note: args.note,
         category_group_id: args.category_group_id,
+        goal_target: args.goal_target,
+        goal_target_date: args.goal_target_date,
+        goal_needs_whole_amount: args.goal_needs_whole_amount,
       });
       return json(formatCategory(category));
     }
@@ -1160,10 +1423,54 @@ export async function handleTool(
     }
     case "month_transactions": {
       const args = MonthTxnsInput.parse(rawArgs);
-      const txns = await client.listMonthTransactions(budget(args), args.month, {
+      const result = await client.listMonthTransactions(budget(args), args.month, {
         ...(args.since_date !== undefined && { since_date: args.since_date }),
+        ...(args.until_date !== undefined && { until_date: args.until_date }),
+        ...(args.type !== undefined && { type: args.type }),
+        ...(args.last_knowledge_of_server !== undefined && {
+          last_knowledge_of_server: args.last_knowledge_of_server,
+        }),
       });
-      return json(txns.filter((t) => !t.deleted).map(formatTransaction));
+      return json(
+        withServerKnowledge(
+          args.last_knowledge_of_server,
+          result.server_knowledge,
+          "transactions",
+          result.transactions.filter((t) => !t.deleted).map(formatTransaction),
+        ),
+      );
+    }
+    case "list_money_movements": {
+      const args = BudgetArg.parse(rawArgs);
+      const result = await client.listMoneyMovements(budget(args));
+      return json({
+        server_knowledge: result.server_knowledge,
+        money_movements: result.money_movements.map(formatMoneyMovement),
+      });
+    }
+    case "month_money_movements": {
+      const args = MoneyMovementMonthInput.parse(rawArgs);
+      const result = await client.listMonthMoneyMovements(budget(args), args.month);
+      return json({
+        server_knowledge: result.server_knowledge,
+        money_movements: result.money_movements.map(formatMoneyMovement),
+      });
+    }
+    case "list_money_movement_groups": {
+      const args = BudgetArg.parse(rawArgs);
+      const result = await client.listMoneyMovementGroups(budget(args));
+      return json({
+        server_knowledge: result.server_knowledge,
+        money_movement_groups: result.money_movement_groups.map(formatMoneyMovementGroup),
+      });
+    }
+    case "month_money_movement_groups": {
+      const args = MoneyMovementMonthInput.parse(rawArgs);
+      const result = await client.listMonthMoneyMovementGroups(budget(args), args.month);
+      return json({
+        server_knowledge: result.server_knowledge,
+        money_movement_groups: result.money_movement_groups.map(formatMoneyMovementGroup),
+      });
     }
     case "bulk_create_transactions": {
       const args = BulkCreateInput.parse(rawArgs);
