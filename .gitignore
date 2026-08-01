@@ -6,3 +6,5 @@ dist
 # Local agent scratch / process artifacts (not project code)
 Plans/
 MEMORY/
+.atrium/
+.mcp.json
