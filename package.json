@@ -1,14 +1,22 @@
 {
   "name": "@redlinelabs/ynab-mcp",
   "version": "0.1.0",
-  "private": true,
   "description": "MCP server for YNAB (You Need A Budget) — budgets, accounts, categories, transactions, and more",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/redlinelabs-dev/ynab-mcp.git"
   },
+  "bin": {
+    "ynab-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "rm -rf dist && tsgo",
     "start": "node dist/server.js",

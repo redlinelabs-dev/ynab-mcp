@@ -1,8 +1,9 @@
 name: Release
 
-# release-please keeps versioning + CHANGELOG via Release PRs. The deploy artifact
-# is a self-hosted Docker image (see docs/DEPLOY.md), NOT an npm package — the
-# package is `private` and there is no npm publish step (ADR-0004).
+# release-please keeps versioning + CHANGELOG via Release PRs. Merging a Release PR
+# publishes @redlinelabs/ynab-mcp to npm (ADR-0005) — the stdio quick-start path —
+# and the self-hosted Docker image remains the deploy path for the remote server
+# (docs/DEPLOY.md, ADR-0004).
 
 on:
   push:
@@ -15,9 +16,30 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  npm-publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
