@@ -1,0 +1,70 @@
+name: Deploy docs site to GitHub Pages
+
+# Builds the Astro + Starlight site under site/ and deploys it to GitHub Pages at
+# ynab-mcp.redlinelabs.dev (CNAME + .nojekyll live in site/public/, so they publish
+# unchanged at the site root). Path-filtered on site/** (plus the root src the
+# reference generator reads) so unrelated commits don't trigger a deploy.
+#
+# The root package is built first — the reference generator (site/scripts/generate-reference.ts)
+# imports the compiled TOOLS array from ../dist/tools.js — then the site itself.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "src/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install root dependencies
+        run: npm ci
+      - name: Build root package (dist/, the generator's source of truth)
+        run: npm run build
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+      - name: Build site (runs the reference generator, then astro build)
+        run: npm run build
+        working-directory: site
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      # actions/deploy-pages intermittently fails with a transient "Deployment failed, try
+      # again later" (GitHub-side, not ours — the build + artifact are already fine). One
+      # automatic retry absorbs it; if this also fails, the job goes red and it's worth a look.
+      - name: Retry deploy (absorb the known Pages transient)
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4

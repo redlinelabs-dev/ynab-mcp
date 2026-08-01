@@ -1,0 +1,33 @@
+# ynab-mcp
+
+> An MCP (Model Context Protocol) server that connects an AI agent to a YNAB (You Need A Budget)
+> account: budgets, accounts, categories, transactions (including splits), months, payees, and
+> scheduled transactions. 46 tools across 8 toolsets. Published to npm as
+> `@redlinelabs/ynab-mcp`, MIT licensed. Talks to the YNAB REST API (`https://api.ynab.com/v1`).
+
+## Two ways to run it
+
+- **stdio + Personal Access Token** — the five-minute solo quick start, via `npx`. One person, one
+  YNAB account, no server to run.
+- **Remote OAuth server** — self-hosted with Docker, for households or shared instances. Anyone who
+  can reach it logs in with their own YNAB account and gets an isolated grant. Read-only by
+  default; write access is an explicit scope elevation.
+
+## Facts worth knowing before connecting an agent
+
+- Every monetary amount in the YNAB API is in **milliunits**: 1000 = one currency unit.
+- The YNAB API's rate limit is **200 requests/hour**.
+- **Bank linking is impossible via the YNAB API** — that's YNAB-app-only. `create_account` makes
+  manual accounts; `import_transactions` only refreshes accounts already linked in the YNAB app.
+- The self-hosted server encrypts upstream YNAB refresh tokens at rest (AES-256-GCM) and stores its
+  own issued tokens as hashes, never in the clear.
+
+## Docs
+
+- Quick start (PAT): https://ynab-mcp.redlinelabs.dev/start-here/quick-start/
+- Connect your agent: https://ynab-mcp.redlinelabs.dev/connect/claude-desktop/
+- Host your own: https://ynab-mcp.redlinelabs.dev/host-your-own/
+- Trust: https://ynab-mcp.redlinelabs.dev/trust/
+- Tool reference: https://ynab-mcp.redlinelabs.dev/reference/budgets/
+- How it works (jargon glossary): https://ynab-mcp.redlinelabs.dev/how-it-works/
+- Source: https://github.com/redlinelabs-dev/ynab-mcp
