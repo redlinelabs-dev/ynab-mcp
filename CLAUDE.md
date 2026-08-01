@@ -117,3 +117,15 @@ Auth is a YNAB **Personal Access Token** sent as a Bearer header. Env vars (load
   Release PR (version bump + CHANGELOG); merging that PR publishes to npm via the Release workflow.
 - **Versioning is 0ver** (zero-based): major stays `0`. Breaking changes bump the minor; features
   and fixes bump the patch.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`redlinelabs-dev/ynab-mcp`), operated via the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` (glossary) at the repo root plus `docs/adr/` for decisions.
+See `docs/agents/domain.md`.
