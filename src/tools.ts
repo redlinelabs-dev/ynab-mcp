@@ -39,12 +39,33 @@ export interface ToolContext {
   defaultBudget: string;
 }
 
+// The YNAB API operation(s) a tool actually calls, for the generated reference's
+// backlinks (site/scripts/generate-reference.ts, docs site "Reference" section).
+// `opAnchor` is the https://api.ynab.com/v1 interactive-docs deep link
+// (`#/<Tag>/<operationId>`), verified against the live spec at
+// https://api.ynab.com/papi/open_api_spec.yaml. That spec's current top-level
+// resource tag is "Plans" (YNAB renamed Budget→Plan API-side); this server and its
+// docs keep calling it a Budget (CONTEXT.md), and the client still calls the
+// `/budgets/...` path form, which the API still serves as a working alias.
+export interface Endpoint {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  opAnchor: string;
+}
+
 export interface ToolDef {
   name: string;
   group: ToolGroup;
   write: boolean;
   description: string;
   inputSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] };
+  endpoints: Endpoint[];
+}
+
+const YNAB_API_DOCS = "https://api.ynab.com/v1";
+
+function ep(method: Endpoint["method"], path: string, tag: string, operationId: string): Endpoint {
+  return { method, path, opAnchor: `${YNAB_API_DOCS}#/${tag}/${operationId}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +311,7 @@ export const TOOLS: ToolDef[] = [
     name: "list_budgets",
     group: "budgets",
     write: false,
+    endpoints: [ep("GET", "/budgets", "Plans", "getPlans")],
     description: "List all budgets on the account (id, name, currency, date range).",
     inputSchema: {
       type: "object",
@@ -305,6 +327,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_budget",
     group: "budgets",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}", "Plans", "getPlanById")],
     description: "Get one full budget export, optionally as a delta from server knowledge.",
     inputSchema: {
       type: "object",
@@ -318,6 +341,7 @@ export const TOOLS: ToolDef[] = [
     name: "budget_settings",
     group: "budgets",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/settings", "Plans", "getPlanSettingsById")],
     description: "Currency and date-format settings for a budget.",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
   },
@@ -325,6 +349,7 @@ export const TOOLS: ToolDef[] = [
     name: "list_accounts",
     group: "accounts",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/accounts", "Accounts", "getAccounts")],
     description: "List accounts in a budget with balances (milliunits + units).",
     inputSchema: {
       type: "object",
@@ -335,6 +360,9 @@ export const TOOLS: ToolDef[] = [
     name: "get_account",
     group: "accounts",
     write: false,
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/accounts/{account_id}", "Accounts", "getAccountById"),
+    ],
     description: "Get one account by id.",
     inputSchema: {
       type: "object",
@@ -346,6 +374,7 @@ export const TOOLS: ToolDef[] = [
     name: "create_account",
     group: "accounts",
     write: true,
+    endpoints: [ep("POST", "/budgets/{budget_id}/accounts", "Accounts", "createAccount")],
     description:
       "Create a MANUAL account (name, type, starting balance in milliunits). The API cannot link a bank for direct import — that is YNAB app-only.",
     inputSchema: {
@@ -366,6 +395,7 @@ export const TOOLS: ToolDef[] = [
     name: "list_categories",
     group: "categories",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/categories", "Categories", "getCategories")],
     description: "List category groups and their categories (budgeted, activity, balance).",
     inputSchema: {
       type: "object",
@@ -376,6 +406,9 @@ export const TOOLS: ToolDef[] = [
     name: "get_category",
     group: "categories",
     write: false,
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/categories/{category_id}", "Categories", "getCategoryById"),
+    ],
     description: "Get one category by id (current month figures).",
     inputSchema: {
       type: "object",
@@ -387,6 +420,14 @@ export const TOOLS: ToolDef[] = [
     name: "update_category_budget",
     group: "categories",
     write: true,
+    endpoints: [
+      ep(
+        "PATCH",
+        "/budgets/{budget_id}/months/{month}/categories/{category_id}",
+        "Categories",
+        "updateMonthCategory",
+      ),
+    ],
     description: "Set the budgeted amount (milliunits) for a category in a given month.",
     inputSchema: {
       type: "object",
@@ -403,6 +444,15 @@ export const TOOLS: ToolDef[] = [
     name: "list_transactions",
     group: "transactions",
     write: false,
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/transactions", "Transactions", "getTransactions"),
+      ep(
+        "GET",
+        "/budgets/{budget_id}/accounts/{account_id}/transactions",
+        "Transactions",
+        "getTransactionsByAccount",
+      ),
+    ],
     description:
       "List transactions. Optionally scope to an account, a since_date, or a type filter (uncategorized/unapproved).",
     inputSchema: {
@@ -422,6 +472,14 @@ export const TOOLS: ToolDef[] = [
     name: "get_transaction",
     group: "transactions",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "getTransactionById",
+      ),
+    ],
     description: "Get one transaction by id.",
     inputSchema: {
       type: "object",
@@ -433,6 +491,9 @@ export const TOOLS: ToolDef[] = [
     name: "create_transaction",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep("POST", "/budgets/{budget_id}/transactions", "Transactions", "createTransaction"),
+    ],
     description:
       "Create a transaction. amount is milliunits (negative = outflow). For a SPLIT across categories (e.g. a mixed Walmart/Target/Amazon receipt), set category_id to null and pass subtransactions whose amounts sum to amount; optionally set import_id so it matches the later bank-imported transaction. YNAB supports splits only on create — the leg breakdown of an existing split cannot be edited via the API.",
     inputSchema: {
@@ -461,6 +522,14 @@ export const TOOLS: ToolDef[] = [
     name: "update_transaction",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "updateTransaction",
+      ),
+    ],
     description: "Update fields on an existing transaction (only provided fields change).",
     inputSchema: {
       type: "object",
@@ -478,6 +547,9 @@ export const TOOLS: ToolDef[] = [
     name: "bulk_update_transactions",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep("PATCH", "/budgets/{budget_id}/transactions", "Transactions", "updateTransactions"),
+    ],
     description:
       "Update many transactions in ONE call (the efficient way to categorize and/or approve a batch). Each update needs an id.",
     inputSchema: {
@@ -501,6 +573,14 @@ export const TOOLS: ToolDef[] = [
     name: "delete_transaction",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep(
+        "DELETE",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "deleteTransaction",
+      ),
+    ],
     description: "Delete a transaction by id (use after confirming a duplicate).",
     inputSchema: {
       type: "object",
@@ -512,6 +592,7 @@ export const TOOLS: ToolDef[] = [
     name: "find_duplicate_transactions",
     group: "transactions",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/transactions", "Transactions", "getTransactions")],
     description:
       "Find candidate duplicate transactions (same account + amount + date). Returns clusters for review — does NOT delete. Pair with delete_transaction.",
     inputSchema: {
@@ -527,6 +608,9 @@ export const TOOLS: ToolDef[] = [
     name: "import_transactions",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep("POST", "/budgets/{budget_id}/transactions/import", "Transactions", "importTransactions"),
+    ],
     description:
       "Trigger direct import on accounts already bank-linked in the YNAB app (pull latest bank activity). Returns newly imported transaction ids. Cannot create the link itself.",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
@@ -535,6 +619,7 @@ export const TOOLS: ToolDef[] = [
     name: "spending_summary",
     group: "transactions",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/transactions", "Transactions", "getTransactions")],
     description:
       "Aggregate spending by category or payee over a date range — totals, units, and counts per group. Cheaper than listing every row.",
     inputSchema: {
@@ -552,6 +637,14 @@ export const TOOLS: ToolDef[] = [
     name: "payee_transactions",
     group: "transactions",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/payees/{payee_id}/transactions",
+        "Transactions",
+        "getTransactionsByPayee",
+      ),
+    ],
     description: "Transaction history for one payee (drill-down for spending habits).",
     inputSchema: {
       type: "object",
@@ -570,6 +663,14 @@ export const TOOLS: ToolDef[] = [
     name: "category_transactions",
     group: "transactions",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/categories/{category_id}/transactions",
+        "Transactions",
+        "getTransactionsByCategory",
+      ),
+    ],
     description: "Transaction history for one category (drill-down for spending habits).",
     inputSchema: {
       type: "object",
@@ -588,6 +689,7 @@ export const TOOLS: ToolDef[] = [
     name: "list_months",
     group: "months",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/months", "Months", "getPlanMonths")],
     description: "List budget months with income/budgeted/activity/to-be-budgeted summaries.",
     inputSchema: {
       type: "object",
@@ -598,6 +700,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_month",
     group: "months",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/months/{month}", "Months", "getPlanMonth")],
     description: 'Get one budget month (default "current") with its category breakdown.',
     inputSchema: {
       type: "object",
@@ -611,6 +714,7 @@ export const TOOLS: ToolDef[] = [
     name: "list_payees",
     group: "payees",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/payees", "Payees", "getPayees")],
     description: "List payees in a budget.",
     inputSchema: {
       type: "object",
@@ -621,6 +725,7 @@ export const TOOLS: ToolDef[] = [
     name: "create_payee",
     group: "payees",
     write: true,
+    endpoints: [ep("POST", "/budgets/{budget_id}/payees", "Payees", "createPayee")],
     description: "Create a payee.",
     inputSchema: {
       type: "object",
@@ -632,6 +737,14 @@ export const TOOLS: ToolDef[] = [
     name: "list_scheduled_transactions",
     group: "scheduled",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/scheduled_transactions",
+        "ScheduledTransactions",
+        "getScheduledTransactions",
+      ),
+    ],
     description: "List scheduled (recurring/upcoming) transactions with next date and frequency.",
     inputSchema: {
       type: "object",
@@ -642,6 +755,14 @@ export const TOOLS: ToolDef[] = [
     name: "get_scheduled_transaction",
     group: "scheduled",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}",
+        "ScheduledTransactions",
+        "getScheduledTransactionById",
+      ),
+    ],
     description: "Get a single scheduled transaction by id.",
     inputSchema: {
       type: "object",
@@ -653,6 +774,14 @@ export const TOOLS: ToolDef[] = [
     name: "create_scheduled_transaction",
     group: "scheduled",
     write: true,
+    endpoints: [
+      ep(
+        "POST",
+        "/budgets/{budget_id}/scheduled_transactions",
+        "ScheduledTransactions",
+        "createScheduledTransaction",
+      ),
+    ],
     description:
       "Create a scheduled (recurring) transaction. amount is milliunits (negative = outflow).",
     inputSchema: {
@@ -696,6 +825,14 @@ export const TOOLS: ToolDef[] = [
     name: "update_scheduled_transaction",
     group: "scheduled",
     write: true,
+    endpoints: [
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}",
+        "ScheduledTransactions",
+        "updateScheduledTransaction",
+      ),
+    ],
     description:
       "Update fields on an existing scheduled transaction (only provided fields change).",
     inputSchema: {
@@ -739,6 +876,14 @@ export const TOOLS: ToolDef[] = [
     name: "delete_scheduled_transaction",
     group: "scheduled",
     write: true,
+    endpoints: [
+      ep(
+        "DELETE",
+        "/budgets/{budget_id}/scheduled_transactions/{scheduled_transaction_id}",
+        "ScheduledTransactions",
+        "deleteScheduledTransaction",
+      ),
+    ],
     description: "Delete a scheduled transaction by id.",
     inputSchema: {
       type: "object",
@@ -750,6 +895,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_user",
     group: "budgets",
     write: false,
+    endpoints: [ep("GET", "/user", "User", "getUser")],
     description: "Get the authenticated YNAB user's id.",
     inputSchema: { type: "object", properties: {} },
   },
@@ -757,6 +903,7 @@ export const TOOLS: ToolDef[] = [
     name: "get_payee",
     group: "payees",
     write: false,
+    endpoints: [ep("GET", "/budgets/{budget_id}/payees/{payee_id}", "Payees", "getPayeeById")],
     description: "Get one payee by id.",
     inputSchema: {
       type: "object",
@@ -768,6 +915,7 @@ export const TOOLS: ToolDef[] = [
     name: "update_payee",
     group: "payees",
     write: true,
+    endpoints: [ep("PATCH", "/budgets/{budget_id}/payees/{payee_id}", "Payees", "updatePayee")],
     description: "Rename a payee.",
     inputSchema: {
       type: "object",
@@ -779,6 +927,9 @@ export const TOOLS: ToolDef[] = [
     name: "list_payee_locations",
     group: "payees",
     write: false,
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/payee_locations", "PayeeLocations", "getPayeeLocations"),
+    ],
     description: "List all payee GPS locations (set by the YNAB mobile app).",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
   },
@@ -786,6 +937,14 @@ export const TOOLS: ToolDef[] = [
     name: "get_payee_location",
     group: "payees",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/payee_locations/{payee_location_id}",
+        "PayeeLocations",
+        "getPayeeLocationById",
+      ),
+    ],
     description: "Get one payee location by id.",
     inputSchema: {
       type: "object",
@@ -797,6 +956,14 @@ export const TOOLS: ToolDef[] = [
     name: "payee_locations",
     group: "payees",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/payees/{payee_id}/payee_locations",
+        "PayeeLocations",
+        "getPayeeLocationsByPayee",
+      ),
+    ],
     description: "List the GPS locations recorded for one payee.",
     inputSchema: {
       type: "object",
@@ -808,6 +975,14 @@ export const TOOLS: ToolDef[] = [
     name: "get_month_category",
     group: "categories",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/months/{month}/categories/{category_id}",
+        "Categories",
+        "getMonthCategoryById",
+      ),
+    ],
     description: "Get one category's figures for a specific month (budgeted/activity/balance).",
     inputSchema: {
       type: "object",
@@ -823,6 +998,7 @@ export const TOOLS: ToolDef[] = [
     name: "create_category",
     group: "categories",
     write: true,
+    endpoints: [ep("POST", "/budgets/{budget_id}/categories", "Categories", "createCategory")],
     description:
       "Create a category in a category group (newer YNAB endpoint; verify availability on your plan).",
     inputSchema: {
@@ -842,6 +1018,9 @@ export const TOOLS: ToolDef[] = [
     name: "update_category",
     group: "categories",
     write: true,
+    endpoints: [
+      ep("PATCH", "/budgets/{budget_id}/categories/{category_id}", "Categories", "updateCategory"),
+    ],
     description:
       "Rename a category, set its note, and/or MOVE it to another group via category_group_id (newer YNAB endpoint). Note: YNAB has no API for reordering categories within a group.",
     inputSchema: {
@@ -863,6 +1042,9 @@ export const TOOLS: ToolDef[] = [
     name: "create_category_group",
     group: "categories",
     write: true,
+    endpoints: [
+      ep("POST", "/budgets/{budget_id}/category_groups", "Categories", "createCategoryGroup"),
+    ],
     description: "Create a category group (newer YNAB endpoint; verify availability on your plan).",
     inputSchema: {
       type: "object",
@@ -874,6 +1056,14 @@ export const TOOLS: ToolDef[] = [
     name: "update_category_group",
     group: "categories",
     write: true,
+    endpoints: [
+      ep(
+        "PATCH",
+        "/budgets/{budget_id}/category_groups/{category_group_id}",
+        "Categories",
+        "updateCategoryGroup",
+      ),
+    ],
     description: "Rename a category group (newer YNAB endpoint).",
     inputSchema: {
       type: "object",
@@ -889,6 +1079,14 @@ export const TOOLS: ToolDef[] = [
     name: "month_transactions",
     group: "transactions",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/months/{month}/transactions",
+        "Transactions",
+        "getTransactionsByMonth",
+      ),
+    ],
     description: "List transactions for a specific budget month.",
     inputSchema: {
       type: "object",
@@ -906,6 +1104,9 @@ export const TOOLS: ToolDef[] = [
     name: "list_money_movements",
     group: "money_movements",
     write: false,
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/money_movements", "MoneyMovements", "getMoneyMovements"),
+    ],
     description: "List money movements in a budget.",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
   },
@@ -913,6 +1114,14 @@ export const TOOLS: ToolDef[] = [
     name: "month_money_movements",
     group: "money_movements",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/months/{month}/money_movements",
+        "MoneyMovements",
+        "getMoneyMovementsByMonth",
+      ),
+    ],
     description: "List money movements for a specific budget month.",
     inputSchema: {
       type: "object",
@@ -926,6 +1135,14 @@ export const TOOLS: ToolDef[] = [
     name: "list_money_movement_groups",
     group: "money_movements",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/money_movement_groups",
+        "MoneyMovements",
+        "getMoneyMovementGroups",
+      ),
+    ],
     description: "List money movement groups in a budget.",
     inputSchema: { type: "object", properties: { ...budgetIdProp } },
   },
@@ -933,6 +1150,14 @@ export const TOOLS: ToolDef[] = [
     name: "month_money_movement_groups",
     group: "money_movements",
     write: false,
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/months/{month}/money_movement_groups",
+        "MoneyMovements",
+        "getMoneyMovementGroupsByMonth",
+      ),
+    ],
     description: "List money movement groups for a specific budget month.",
     inputSchema: {
       type: "object",
@@ -946,6 +1171,9 @@ export const TOOLS: ToolDef[] = [
     name: "bulk_create_transactions",
     group: "transactions",
     write: true,
+    endpoints: [
+      ep("POST", "/budgets/{budget_id}/transactions", "Transactions", "createTransaction"),
+    ],
     description:
       "Create MANY transactions in one call (POST array). Each item needs account_id, date, amount; optional category_id, payee, memo, import_id, and subtransactions[] for splits. Returns created ids + any duplicate_import_ids.",
     inputSchema: {
