@@ -1,0 +1,46 @@
+/* Light-touch theming over Starlight's default — a calm, money-green accent instead of
+   Starlight's default purple, and a couple of small badge helpers used by the generated
+   reference pages (read/write, milliunits). Everything else stays Starlight default. */
+
+:root {
+  --sl-color-accent-low: #1a3b2c;
+  --sl-color-accent: #2f9e6e;
+  --sl-color-accent-high: #b3f0d3;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #d3f3e3;
+  --sl-color-accent: #1f6f4d;
+  --sl-color-accent-high: #123825;
+}
+
+.tool-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.tool-badge-read {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+}
+
+.tool-badge-write {
+  background: #7a3b12;
+  color: #ffe4c7;
+}
+
+.tool-milliunits {
+  border-left: 3px solid var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+  padding: 0.5rem 0.9rem;
+  border-radius: 4px;
+  font-size: 0.92rem;
+  margin: 0.6rem 0;
+}

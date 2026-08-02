@@ -11,5 +11,5 @@
       "unknown"
     ]
   },
-  "ignorePatterns": ["CHANGELOG.md"]
+  "ignorePatterns": ["CHANGELOG.md", "site/**"]
 }

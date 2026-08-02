@@ -1,0 +1,39 @@
+---
+title: Codex app
+description: Connect the Codex (ChatGPT) desktop app to ynab-mcp — with a Personal Access Token, or to a self-hosted instance over OAuth.
+---
+
+The Codex desktop app reads the same `~/.codex/config.toml` as [Codex CLI](/connect/codex-cli/) —
+there's no separate app-specific config format, and configuring one surface configures the other.
+
+## stdio + Personal Access Token
+
+Add this to `~/.codex/config.toml` (by hand, or via `codex mcp add` from a terminal — see the
+[Codex CLI page](/connect/codex-cli/) for that command):
+
+```toml
+[mcp_servers.ynab]
+command = "npx"
+args = ["-y", "@redlinelabs/ynab-mcp"]
+
+[mcp_servers.ynab.env]
+YNAB_TOKEN = "your-personal-access-token"
+YNAB_BUDGET_ID = "last-used"
+```
+
+Restart the app. See the [Quick start](/start-here/quick-start/) for where to get a token.
+
+## Connect to a hosted instance (OAuth)
+
+If someone else — or a past you — is running the [self-hosted server](/host-your-own/), add its URL
+instead of a command:
+
+```toml
+[mcp_servers.ynab]
+url = "https://<your-hostname>/mcp"
+```
+
+The app's OAuth login for MCP servers runs through the same flow the CLI's `codex mcp login`
+triggers — log into YNAB and choose read-only or full access when prompted. If the app doesn't
+surface a login prompt automatically, run `codex mcp login ynab` from a terminal; both share the
+same config and the same stored credentials.

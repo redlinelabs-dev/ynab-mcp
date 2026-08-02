@@ -381,3 +381,30 @@ describe("handleTool", () => {
     expect(out.id).toBe("s1");
   });
 });
+
+// The docs site's generated reference (site/scripts/generate-reference.ts) backlinks each
+// tool to the YNAB API operation(s) it calls, using this `endpoints` metadata. A tool that
+// ships without it can't be documented — so this test, not a lint rule, is what makes that
+// structurally impossible to merge (see issue #14 / ADR-0005).
+describe("TOOLS endpoints metadata", () => {
+  it("every tool declares at least one endpoint", () => {
+    for (const tool of TOOLS) {
+      expect(tool.endpoints.length, `${tool.name} has no endpoints`).toBeGreaterThan(0);
+    }
+  });
+
+  it("every endpoint has a method, a path, and a YNAB API doc anchor", () => {
+    for (const tool of TOOLS) {
+      for (const endpoint of tool.endpoints) {
+        expect(["GET", "POST", "PUT", "PATCH", "DELETE"]).toContain(endpoint.method);
+        expect(endpoint.path.startsWith("/"), `${tool.name} endpoint path: ${endpoint.path}`).toBe(
+          true,
+        );
+        expect(
+          endpoint.opAnchor.startsWith("https://api.ynab.com/v1#/"),
+          `${tool.name} opAnchor: ${endpoint.opAnchor}`,
+        ).toBe(true);
+      }
+    }
+  });
+});

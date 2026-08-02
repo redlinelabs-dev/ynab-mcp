@@ -1,0 +1,563 @@
+---
+// ynab-mcp landing page — a custom static page in front of the Starlight docs
+// (the atrium-site pattern). Self-contained: no external fonts, scripts, or trackers.
+// Every claim here has to hold up next to the Trust page — see docs/adr/0005 and
+// keel's claims rule (test/docs.test.ts pins the load-bearing ones).
+const description =
+  "ynab-mcp connects an AI agent to your YNAB budget — balances, categories, transactions, splits, " +
+  "spending summaries — over the Model Context Protocol. Read-only by default; bank linking is " +
+  "impossible via the YNAB API, so the worst case is never \"it moved my money without asking\".";
+const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ynab-mcp — connect an AI agent to your YNAB budget</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="ynab-mcp — connect an AI agent to your YNAB budget" />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ynab-mcp.redlinelabs.dev/" />
+    <meta name="color-scheme" content="light dark" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="container nav-inner">
+        <a class="brand" href="/">
+          <img src="/favicon.svg" alt="" width="24" height="24" />
+          <span>ynab-mcp</span>
+        </a>
+        <nav class="nav-links" aria-label="Site">
+          <a href="/start-here/quick-start/">Quick start</a>
+          <a href="/reference/budgets/">Reference</a>
+          <a href="/trust/">Trust</a>
+          <a href={REPO} rel="noopener">GitHub</a>
+        </nav>
+        <a class="btn btn-primary btn-sm" href="/start-here/quick-start/">Get started</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container">
+          <p class="eyebrow">Model Context Protocol server for YNAB</p>
+          <h1>Point an AI agent at your budget. Nothing moves without you asking.</h1>
+          <p class="lede">
+            ynab-mcp gives an AI agent read access to your YNAB accounts, categories, and
+            transactions — and, if you choose, the ability to categorize, create, and reconcile
+            them. It talks to the real YNAB API, not a simulation, and it cannot link a bank
+            account: that's YNAB-app-only, by YNAB's own design.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/start-here/quick-start/">Quick start (5 minutes)</a>
+            <a class="btn btn-ghost" href="/host-your-own/">Host it for your household</a>
+          </div>
+          <div class="code-shot">
+            <div class="code-titlebar"><span></span><span></span><span></span></div>
+            <pre><code>YNAB_TOKEN=&lt;your personal access token&gt; npx @redlinelabs/ynab-mcp</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="strip" aria-label="What ynab-mcp promises">
+        <div class="container strip-inner">
+          <div class="strip-item">
+            <h3>Read-only by default</h3>
+            <p>
+              Every mode starts read-only. Write access — creating or editing transactions,
+              budgeting — is an explicit choice, not the default.
+            </p>
+          </div>
+          <div class="strip-item">
+            <h3>Can't touch your bank</h3>
+            <p>
+              Linking a bank account is impossible through the YNAB API — YNAB reserves that to
+              its own app. This server can create manual accounts and refresh already-linked ones,
+              nothing more.
+            </p>
+          </div>
+          <div class="strip-item">
+            <h3>Your own credentials</h3>
+            <p>
+              A Personal Access Token you generate and can revoke any time, or your own YNAB login
+              through OAuth if you're connecting to a self-hosted instance. No shared account, ever.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="modes">
+        <div class="container">
+          <h2 class="section-title">Two ways to run it</h2>
+          <p class="section-lede">
+            Pick the one that matches who's using it — both are first-class, and both are covered
+            on every <a href="/connect/claude-desktop/">Connect your agent</a> page.
+          </p>
+          <div class="mode-grid">
+            <div class="mode-card">
+              <h3>Solo — Personal Access Token</h3>
+              <p>
+                <code>npx @redlinelabs/ynab-mcp</code> with a token from your own YNAB account.
+                Nothing to host, nothing to share. The five-minute on-ramp for one person on one
+                machine.
+              </p>
+              <a href="/start-here/quick-start/">Quick start →</a>
+            </div>
+            <div class="mode-card">
+              <h3>Household — self-hosted OAuth server</h3>
+              <p>
+                Run the server yourself with Docker; anyone who can reach it logs in with
+                <strong>their own</strong> YNAB account over OAuth and gets an isolated, read-only-
+                by-default grant. Recommended once more than one person connects.
+              </p>
+              <a href="/host-your-own/">Host your own →</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tools">
+        <div class="container">
+          <h2 class="section-title">46 tools, 8 toolsets</h2>
+          <p class="section-lede">
+            Every tool wraps one YNAB API operation with a backlink to it — enable only the
+            toolsets a given agent needs to keep its context lean.
+          </p>
+          <div class="tool-grid">
+            <a class="tool-pill" href="/reference/budgets/">Budgets</a>
+            <a class="tool-pill" href="/reference/accounts/">Accounts</a>
+            <a class="tool-pill" href="/reference/categories/">Categories</a>
+            <a class="tool-pill" href="/reference/transactions/">Transactions</a>
+            <a class="tool-pill" href="/reference/months/">Months</a>
+            <a class="tool-pill" href="/reference/payees/">Payees</a>
+            <a class="tool-pill" href="/reference/scheduled/">Scheduled transactions</a>
+            <a class="tool-pill" href="/reference/money_movements/">Money movements</a>
+          </div>
+          <p class="tools-more"><a href="/reference/budgets/">Full tool reference →</a></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <div class="footer-brand">
+          <a class="brand" href="/">
+            <img src="/favicon.svg" alt="" width="22" height="22" />
+            <span>ynab-mcp</span>
+          </a>
+          <p>Your budget, your credentials, your agent.</p>
+        </div>
+        <nav class="footer-cols" aria-label="Footer">
+          <div>
+            <h4>Docs</h4>
+            <a href="/start-here/quick-start/">Quick start</a>
+            <a href="/connect/claude-desktop/">Connect your agent</a>
+            <a href="/host-your-own/">Host your own</a>
+            <a href="/how-it-works/">How it works</a>
+          </div>
+          <div>
+            <h4>Trust</h4>
+            <a href="/trust/">What's stored</a>
+            <a href={`${REPO}/blob/main/docs/adr`} rel="noopener">Architecture decisions</a>
+            <a href={`${REPO}/issues`} rel="noopener">Issues</a>
+          </div>
+          <div>
+            <h4>Project</h4>
+            <a href={REPO} rel="noopener">GitHub</a>
+            <a href="https://www.npmjs.com/package/@redlinelabs/ynab-mcp" rel="noopener">npm</a>
+          </div>
+        </nav>
+      </div>
+      <div class="container footer-base">
+        <p>MIT licensed. Not affiliated with YNAB / You Need A Budget LLC.</p>
+      </div>
+    </footer>
+
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7faf8;
+        --bg-raise: #eef4f0;
+        --panel: #ffffff;
+        --border: #d7e3da;
+        --border-soft: #e4ede7;
+        --text: #12211a;
+        --muted: #4a5b52;
+        --dim: #7c8c83;
+        --accent: #1f6f4d;
+        --accent-hover: #17593d;
+        --code-bg: #0f1a15;
+        --code-text: #d8f5e4;
+        --radius: 12px;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0c130f;
+          --bg-raise: #101a14;
+          --panel: #121d17;
+          --border: #223229;
+          --border-soft: #1a251e;
+          --text: #eaf3ee;
+          --muted: #a6b8ad;
+          --dim: #6d7d74;
+          --accent: #3fbf85;
+          --accent-hover: #5cd39a;
+          --code-bg: #08100c;
+          --code-text: #baf4d5;
+        }
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 16.5px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      a {
+        color: var(--accent-hover);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.86em;
+        background: var(--bg-raise);
+        border: 1px solid var(--border-soft);
+        border-radius: 5px;
+        padding: 0.08em 0.35em;
+      }
+      h1,
+      h2,
+      h3 {
+        letter-spacing: -0.015em;
+        line-height: 1.15;
+        text-wrap: balance;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: 9px;
+        padding: 0.72rem 1.35rem;
+        font-weight: 600;
+        font-size: 0.97rem;
+        border: 1px solid transparent;
+        transition:
+          background 140ms ease,
+          border-color 140ms ease;
+      }
+      .btn:hover {
+        text-decoration: none;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+      }
+      .btn-ghost {
+        border-color: var(--border);
+        color: var(--text);
+        background: transparent;
+      }
+      .btn-ghost:hover {
+        border-color: var(--dim);
+        background: var(--bg-raise);
+      }
+      .btn-sm {
+        padding: 0.42rem 0.95rem;
+        font-size: 0.9rem;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: color-mix(in srgb, var(--bg) 85%, transparent);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .nav-inner {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        height: 60px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        color: var(--text);
+        font-weight: 700;
+        font-size: 1.02rem;
+      }
+      .brand:hover {
+        text-decoration: none;
+      }
+      .nav-links {
+        display: flex;
+        gap: 1.6rem;
+        margin-left: auto;
+      }
+      .nav-links a {
+        color: var(--muted);
+        font-size: 0.94rem;
+        font-weight: 500;
+      }
+      .nav-links a:hover {
+        color: var(--text);
+        text-decoration: none;
+      }
+
+      .hero {
+        padding: 84px 0 40px;
+        text-align: center;
+      }
+      .eyebrow {
+        display: inline-flex;
+        color: var(--muted);
+        font-size: 0.86rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.3rem 0.9rem;
+        background: var(--bg-raise);
+      }
+      .hero h1 {
+        font-size: clamp(2rem, 4.6vw, 3rem);
+        font-weight: 800;
+        max-width: 24ch;
+        margin: 1.3rem auto 0;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 1.1rem;
+        max-width: 62ch;
+        margin: 1.2rem auto 0;
+      }
+      .cta-row {
+        display: flex;
+        gap: 0.8rem;
+        justify-content: center;
+        margin-top: 1.8rem;
+        flex-wrap: wrap;
+      }
+      .code-shot {
+        max-width: 640px;
+        margin: 2.6rem auto 0;
+        border-radius: var(--radius);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        box-shadow: 0 20px 60px -24px rgba(0, 0, 0, 0.35);
+        text-align: left;
+      }
+      .code-titlebar {
+        display: flex;
+        gap: 6px;
+        padding: 10px 14px;
+        background: color-mix(in srgb, var(--code-bg) 92%, white 8%);
+      }
+      .code-titlebar span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #4a5b52;
+      }
+      .code-shot pre {
+        margin: 0;
+        padding: 1.1rem 1.3rem 1.4rem;
+        background: var(--code-bg);
+        overflow-x: auto;
+      }
+      .code-shot code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--code-text);
+        font-size: 0.92rem;
+      }
+
+      .section-title {
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        font-weight: 750;
+      }
+      .section-lede {
+        color: var(--muted);
+        max-width: 64ch;
+        margin-top: 0.8rem;
+        font-size: 1.02rem;
+      }
+
+      .strip {
+        border-block: 1px solid var(--border-soft);
+        background: var(--bg-raise);
+        margin-top: 56px;
+      }
+      .strip-inner {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2.2rem;
+        padding-block: 2rem;
+      }
+      .strip-item h3 {
+        font-size: 1rem;
+        margin-bottom: 0.35rem;
+      }
+      .strip-item p {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .modes {
+        padding: 80px 0 20px;
+      }
+      .mode-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.2rem;
+        margin-top: 2.2rem;
+      }
+      .mode-card {
+        background: var(--panel);
+        border: 1px solid var(--border-soft);
+        border-radius: 14px;
+        padding: 1.6rem;
+      }
+      .mode-card h3 {
+        font-size: 1.08rem;
+        margin-bottom: 0.6rem;
+      }
+      .mode-card p {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+      .mode-card a {
+        display: inline-block;
+        margin-top: 0.9rem;
+        font-weight: 600;
+        font-size: 0.92rem;
+      }
+
+      .tools {
+        padding: 72px 0 96px;
+      }
+      .tool-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        margin-top: 1.8rem;
+      }
+      .tool-pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.45rem 1rem;
+        font-size: 0.9rem;
+        color: var(--text);
+        background: var(--panel);
+      }
+      .tool-pill:hover {
+        border-color: var(--accent);
+        text-decoration: none;
+      }
+      .tools-more {
+        margin-top: 1.4rem;
+        font-size: 0.95rem;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border-soft);
+        background: var(--bg-raise);
+        padding: 48px 0 28px;
+      }
+      .footer-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        gap: 3rem;
+      }
+      .footer-brand p {
+        color: var(--dim);
+        font-size: 0.9rem;
+        margin-top: 0.9rem;
+      }
+      .footer-cols {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+      }
+      .footer-cols h4 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--dim);
+        margin-bottom: 0.8rem;
+      }
+      .footer-cols a {
+        display: block;
+        color: var(--muted);
+        font-size: 0.92rem;
+        padding: 0.2rem 0;
+      }
+      .footer-cols a:hover {
+        color: var(--text);
+        text-decoration: none;
+      }
+      .footer-base {
+        border-top: 1px solid var(--border-soft);
+        margin-top: 36px;
+        padding-top: 20px;
+      }
+      .footer-base p {
+        color: var(--dim);
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 860px) {
+        .strip-inner,
+        .mode-grid {
+          grid-template-columns: 1fr;
+        }
+        .footer-inner {
+          grid-template-columns: 1fr;
+        }
+        .nav-links {
+          display: none;
+        }
+      }
+    </style>
+  </body>
+</html>
