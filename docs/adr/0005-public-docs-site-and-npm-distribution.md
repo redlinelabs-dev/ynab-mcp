@@ -48,3 +48,13 @@ and shared instances.
   superseded its hosting choice); Docker remains the deploy path for the remote server.
 - The docs site is a consumer surface: contributor/architecture docs stay in-repo (`CLAUDE.md`,
   `docs/`, ADRs) and are not published to the site.
+
+## Amendment (2026-08-02): OAuth is the preferred connection method
+
+"PAT is the five-minute solo quick start, documented first" is revised: every connect page now
+leads with **OAuth against a hosted instance (recommended)** — Claude Desktop custom connectors,
+Claude Code's HTTP transport, and Codex all support the browser OAuth flow, and the server already
+ships the Dynamic Client Registration they require. The PAT/stdio path remains fully supported but
+is presented as the alternate for solo users who won't run the server; demo mode
+(`YNAB_DEMO=1 npx @redlinelabs/ynab-mcp`) stays the zero-credential try-it path. Because desktop
+OAuth flows want HTTPS, the operator guide blesses `tailscale serve` as the recommended exposure.
