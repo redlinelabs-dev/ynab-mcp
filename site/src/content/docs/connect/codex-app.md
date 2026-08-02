@@ -1,6 +1,6 @@
 ---
 title: Codex app
-description: Connect the Codex (ChatGPT) desktop app to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
+description: The Codex desktop app reads the same ~/.codex/config.toml as the CLI — add a ynab-mcp server URL for OAuth, or a launch command plus a YNAB Personal Access Token.
 ---
 
 The Codex desktop app reads the same `~/.codex/config.toml` as [Codex CLI](/connect/codex-cli/) —

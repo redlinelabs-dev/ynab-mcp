@@ -78,8 +78,8 @@ Personal Access Token alternate:
   actually changes in each mode.
 - **YNAB's API allows 200 requests per hour**, per token (PAT mode) or per connection (OAuth mode).
   Browsing a budget and categorizing a handful of transactions won't come close; importing hundreds
-  of transactions one call at a time might. See [How it works](/how-it-works/) if that number is
-  unfamiliar.
+  of transactions one call at a time might. See
+  [which tools do the work of many calls in one](/trust/#the-rate-limit-is-real-and-shared).
 - **No mode can link a bank account** — not demo, not OAuth, not a Personal Access Token — see
   [Trust](/trust/) for why that's a hard limit of the YNAB API, not a missing feature here.
 
@@ -93,5 +93,5 @@ YNAB_TOOLSETS=budgets,accounts,transactions   # only these toolsets are exposed
 YNAB_READ_ONLY=true                           # drop every mutating tool
 ```
 
-See [How it works](/how-it-works/) for what a toolset is, or the [Reference](/reference/budgets/)
-for the full tool list by group.
+See [what a toolset is](/how-it-works/#toolsets), or
+[the full tool reference, one page per toolset](/reference/budgets/).
