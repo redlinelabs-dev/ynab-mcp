@@ -2,31 +2,24 @@
 import "dotenv/config";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import type { ToolContext } from "./tools.js";
-
-import { YnabClient } from "./client.js";
 import { buildMcpServer } from "./mcp-server.js";
+import { buildStdioContext } from "./stdio-config.js";
 import { enabledToolNames } from "./tools.js";
-import { parseReadOnly, parseToolsets } from "./toolsets.js";
 
 // --- Config ---
 
-const TOKEN = process.env["YNAB_TOKEN"] ?? "";
-const DEFAULT_BUDGET = (process.env["YNAB_BUDGET_ID"] ?? "last-used").trim() || "last-used";
+const result = buildStdioContext(process.env);
 
-if (!TOKEN) {
-  console.error(
-    "Set YNAB_TOKEN to a YNAB Personal Access Token (Account Settings > Developer Settings).",
-  );
+if (!result.ok) {
+  console.error(result.error);
   process.exit(1);
 }
 
-const ctx: ToolContext = {
-  client: new YnabClient(TOKEN),
-  enabledGroups: parseToolsets(process.env["YNAB_TOOLSETS"]),
-  readOnly: parseReadOnly(process.env["YNAB_READ_ONLY"]),
-  defaultBudget: DEFAULT_BUDGET,
-};
+const { ctx, demo } = result;
+
+if (demo) {
+  console.error("[ynab-mcp] Demo mode: serving a fictional Demo Budget — no YNAB account needed.");
+}
 
 if (enabledToolNames(ctx).size === 0) {
   console.error("[ynab-mcp] No tools enabled — check YNAB_TOOLSETS / YNAB_READ_ONLY.");

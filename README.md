@@ -191,6 +191,26 @@ OAuth keeps working alongside it; the PAT path is per-request (each client uses 
 This runs the server locally over stdio with a Personal Access Token — for single-user/dev use, or
 clients that launch the process directly. (The remote Docker server above is the multi-user path.)
 
+### Try it with no credentials (demo mode)
+
+Set `YNAB_DEMO=1` and skip everything below — no YNAB account, no token. The server serves a
+canned, entirely fictional **Demo Budget** (a checking/savings/credit-card account, category
+groups, a few months of realistic transactions, and some scheduled transactions) from memory.
+Writes (creating a transaction, budgeting a category, etc.) work and are reflected back for the
+rest of the session, but nothing is persisted — the demo budget resets every time the process
+restarts.
+
+```bash
+npm run build
+YNAB_DEMO=1 node dist/index.js
+```
+
+Or point a client at it directly, e.g. for Claude Code:
+
+```bash
+claude mcp add --transport stdio --env YNAB_DEMO=1 ynab-demo -- node /absolute/path/to/ynab-mcp/dist/index.js
+```
+
 ### 1. Create a YNAB Personal Access Token
 
 In YNAB, go to **Account Settings → Developer Settings → New Token**.
@@ -204,11 +224,13 @@ YNAB_TOKEN=your-personal-access-token
 YNAB_BUDGET_ID=last-used
 ```
 
-- `YNAB_TOKEN` — your Personal Access Token (**required**)
+- `YNAB_TOKEN` — your Personal Access Token (**required**, unless `YNAB_DEMO` is set)
 - `YNAB_BUDGET_ID` — default budget for tools that omit `budget_id`. Accepts a budget UUID or an
   alias (`last-used`, `default`). Defaults to `last-used`.
 - `YNAB_TOOLSETS` — optional comma-separated [toolsets](#toolsets) to expose (default: all)
 - `YNAB_READ_ONLY` — optional; set to `true` to expose only read tools
+- `YNAB_DEMO` — optional; set to `true`/`1` to run against a fictional Demo Budget with no token
+  and no YNAB account (see [Try it with no credentials](#try-it-with-no-credentials-demo-mode))
 
 > **Two ways to run this.** The instructions below are the **local, single-user stdio** server (a
 > Personal Access Token on your own machine). For a **remote, multi-user OAuth** server you self-host
