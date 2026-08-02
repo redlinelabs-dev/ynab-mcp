@@ -62,3 +62,9 @@ limit.
 ynab-mcp is an independent, MIT-licensed project. It is not built, reviewed, or endorsed by YNAB /
 You Need A Budget LLC. It talks to YNAB only through YNAB's own public API, using credentials you
 provide.
+
+We are not affiliated, associated, or in any way officially connected with YNAB or any of its
+subsidiaries or affiliates. The official YNAB website can be found at
+[https://www.ynab.com](https://www.ynab.com). The names YNAB and You Need A Budget, as well as
+related names, tradenames, marks, trademarks, emblems, and images are registered trademarks of
+YNAB.
