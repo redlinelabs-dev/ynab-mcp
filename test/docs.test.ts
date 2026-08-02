@@ -110,6 +110,7 @@ describe("environment variable names match the real code", () => {
 
   const codeSurface = [
     readFileSync(join(root, "src", "index.ts"), "utf8"),
+    readFileSync(join(root, "src", "stdio-config.ts"), "utf8"),
     readFileSync(join(root, "src", "server.ts"), "utf8"),
     readFileSync(join(root, "docker-compose.yml"), "utf8"),
     readFileSync(join(root, "docs", "DEPLOY.md"), "utf8"),
@@ -128,7 +129,7 @@ describe("environment variable names match the real code", () => {
         expect(
           allowlist.has(token),
           `${file.slice(root.length + 1)} mentions \`${token}\`, which doesn't appear in ` +
-            "src/index.ts, src/server.ts, docker-compose.yml, or docs/DEPLOY.md",
+            "src/index.ts, src/stdio-config.ts, src/server.ts, docker-compose.yml, or docs/DEPLOY.md",
         ).toBe(true);
       }
     }
