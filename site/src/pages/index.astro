@@ -53,12 +53,12 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
             account: that's YNAB-app-only, by YNAB's own design.
           </p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="/start-here/quick-start/">Quick start (5 minutes)</a>
+            <a class="btn btn-primary" href="/start-here/quick-start/">Try it now, no account needed</a>
             <a class="btn btn-ghost" href="/host-your-own/">Host it for your household</a>
           </div>
           <div class="code-shot">
             <div class="code-titlebar"><span></span><span></span><span></span></div>
-            <pre><code>YNAB_TOKEN=&lt;your personal access token&gt; npx @redlinelabs/ynab-mcp</code></pre>
+            <pre><code>YNAB_DEMO=1 npx @redlinelabs/ynab-mcp</code></pre>
           </div>
         </div>
       </section>
@@ -83,8 +83,9 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
           <div class="strip-item">
             <h3>Your own credentials</h3>
             <p>
-              A Personal Access Token you generate and can revoke any time, or your own YNAB login
-              through OAuth if you're connecting to a self-hosted instance. No shared account, ever.
+              Your own YNAB login through OAuth when you're connecting to a server (recommended),
+              or a Personal Access Token you generate yourself if you'd rather run nothing. No
+              shared account, ever.
             </p>
           </div>
         </div>
@@ -92,29 +93,40 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
 
       <section class="modes">
         <div class="container">
-          <h2 class="section-title">Two ways to run it</h2>
+          <h2 class="section-title">Three ways to run it</h2>
           <p class="section-lede">
-            Pick the one that matches who's using it — both are first-class, and both are covered
-            on every <a href="/connect/claude-desktop/">Connect your agent</a> page.
+            Try it instantly, then pick the real setup — connecting to a server over OAuth is
+            recommended, with a Personal Access Token as the zero-infrastructure alternate. All
+            three are covered on every <a href="/connect/claude-desktop/">Connect your agent</a>
+            page.
           </p>
           <div class="mode-grid">
             <div class="mode-card">
-              <h3>Solo — Personal Access Token</h3>
+              <h3>OAuth to a server — recommended</h3>
               <p>
-                <code>npx @redlinelabs/ynab-mcp</code> with a token from your own YNAB account.
-                Nothing to host, nothing to share. The five-minute on-ramp for one person on one
-                machine.
+                Run the server yourself with Docker (or connect to one someone in your household
+                already runs); anyone who can reach it logs in with <strong>their own</strong> YNAB
+                account over OAuth and gets an isolated, read-only-by-default grant.
+              </p>
+              <a href="/host-your-own/">Host your own →</a>
+            </div>
+            <div class="mode-card">
+              <h3>Demo mode — try it now</h3>
+              <p>
+                <code>YNAB_DEMO=1 npx @redlinelabs/ynab-mcp</code>. No YNAB account, no token,
+                nothing to host. Runs against a fictional in-memory budget so you can see the
+                tools work before deciding on a real setup.
               </p>
               <a href="/start-here/quick-start/">Quick start →</a>
             </div>
             <div class="mode-card">
-              <h3>Household — self-hosted OAuth server</h3>
+              <h3>Personal Access Token — alternate</h3>
               <p>
-                Run the server yourself with Docker; anyone who can reach it logs in with
-                <strong>their own</strong> YNAB account over OAuth and gets an isolated, read-only-
-                by-default grant. Recommended once more than one person connects.
+                <code>npx @redlinelabs/ynab-mcp</code> with a token from your own YNAB account.
+                Real budget access, nothing to host, for one person who doesn't want to run a
+                server.
               </p>
-              <a href="/host-your-own/">Host your own →</a>
+              <a href="/start-here/quick-start/">Quick start →</a>
             </div>
           </div>
         </div>
@@ -448,7 +460,7 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
       }
       .mode-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, 1fr);
         gap: 1.2rem;
         margin-top: 2.2rem;
       }

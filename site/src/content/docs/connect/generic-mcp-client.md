@@ -1,40 +1,17 @@
 ---
 title: Generic MCP client
-description: Connect any MCP-capable client to ynab-mcp — with a Personal Access Token, or to a self-hosted instance over OAuth.
+description: Connect any MCP-capable client to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
 ---
 
-Not using one of the harnesses with its own page? Every MCP client needs the same two pieces of
-information, just phrased in whatever config format that client uses.
+Not using one of the harnesses with its own page? Every MCP client needs the same information,
+just phrased in whatever config format that client uses.
 
-## stdio + Personal Access Token
+## Connect to a server (OAuth) — recommended
 
-Give the client a **command to launch** and an **environment variable**. In the common
-`mcpServers`-style JSON config used by several clients:
-
-```json
-{
-  "mcpServers": {
-    "ynab": {
-      "command": "npx",
-      "args": ["-y", "@redlinelabs/ynab-mcp"],
-      "env": {
-        "YNAB_TOKEN": "your-personal-access-token",
-        "YNAB_BUDGET_ID": "last-used"
-      }
-    }
-  }
-}
-```
-
-If your client instead wants a bare command line, it's `npx -y @redlinelabs/ynab-mcp` with
-`YNAB_TOKEN` (and optionally `YNAB_BUDGET_ID`, `YNAB_TOOLSETS`, `YNAB_READ_ONLY`) set in its
-environment. See the [Quick start](/start-here/quick-start/) for where to get a token.
-
-## Connect to a hosted instance (OAuth)
-
-If someone else — or a past you — is running the [self-hosted server](/host-your-own/), and your
-client supports **remote MCP servers with OAuth** (sometimes called "Streamable HTTP" transport),
-give it the server's URL:
+If someone — you, or someone in your household — is running the
+[self-hosted server](/host-your-own/), and your client supports **remote MCP servers with OAuth**
+(sometimes called "Streamable HTTP" transport), this is the recommended way to connect: you log
+into YNAB with your own account instead of sharing a token. Give the client the server's URL:
 
 ```json
 {
@@ -57,3 +34,28 @@ Personal Access Token as the bearer token instead of going through OAuth:
 ```
 Authorization: Bearer your-personal-access-token
 ```
+
+## Alternate: stdio + Personal Access Token
+
+No server to run, but a single token stands in for your own login — the right trade when you're
+the only person using this. Give the client a **command to launch** and an **environment
+variable**. In the common `mcpServers`-style JSON config used by several clients:
+
+```json
+{
+  "mcpServers": {
+    "ynab": {
+      "command": "npx",
+      "args": ["-y", "@redlinelabs/ynab-mcp"],
+      "env": {
+        "YNAB_TOKEN": "your-personal-access-token",
+        "YNAB_BUDGET_ID": "last-used"
+      }
+    }
+  }
+}
+```
+
+If your client instead wants a bare command line, it's `npx -y @redlinelabs/ynab-mcp` with
+`YNAB_TOKEN` (and optionally `YNAB_BUDGET_ID`, `YNAB_TOOLSETS`, `YNAB_READ_ONLY`) set in its
+environment. See the [Quick start](/start-here/quick-start/) for where to get a token.

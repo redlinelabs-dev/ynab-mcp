@@ -1,12 +1,34 @@
 ---
 title: Codex CLI
-description: Connect OpenAI Codex CLI to ynab-mcp — with a Personal Access Token, or to a self-hosted instance over OAuth.
+description: Connect OpenAI Codex CLI to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
 ---
 
 Codex stores MCP server config in `~/.codex/config.toml` (or a project-scoped `.codex/config.toml`
 for trusted projects).
 
-## stdio + Personal Access Token
+## Connect to a server (OAuth) — recommended
+
+If someone — you, or someone in your household — is running the
+[self-hosted server](/host-your-own/), this is the recommended way to connect: you log into YNAB
+with your own account instead of sharing a token. Point Codex at its URL instead of a command:
+
+```toml
+[mcp_servers.ynab]
+url = "https://<your-hostname>/mcp"
+```
+
+Then start the login:
+
+```bash
+codex mcp login ynab
+```
+
+This opens the browser OAuth flow — you'll log into YNAB and choose read-only or full access.
+
+## Alternate: stdio + Personal Access Token
+
+No server to run, but a single token stands in for your own login — the right trade when you're
+the only person using this.
 
 ```bash
 codex mcp add ynab \
@@ -28,21 +50,3 @@ YNAB_BUDGET_ID = "last-used"
 ```
 
 See the [Quick start](/start-here/quick-start/) for where to get a token.
-
-## Connect to a hosted instance (OAuth)
-
-If someone else — or a past you — is running the [self-hosted server](/host-your-own/), point Codex
-at its URL instead of a command:
-
-```toml
-[mcp_servers.ynab]
-url = "https://<your-hostname>/mcp"
-```
-
-Then start the login:
-
-```bash
-codex mcp login ynab
-```
-
-This opens the browser OAuth flow — you'll log into YNAB and choose read-only or full access.
