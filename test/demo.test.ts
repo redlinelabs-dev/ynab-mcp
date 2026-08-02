@@ -249,6 +249,37 @@ describe("demo mode — write path mutates state", () => {
     expect(scheduled_transactions.some((s) => s.id === created.id)).toBe(true);
   });
 
+  it("create_scheduled_transaction stores flag_color, matching the regular-transaction path", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+
+    const created = await client.createScheduledTransaction("last-used", {
+      account_id: "acc-checking",
+      date: "2026-09-15",
+      amount: -2500,
+      frequency: "monthly",
+      payee_name: "Flagged Payee",
+      flag_color: "purple",
+    });
+
+    expect(created.flag_color).toBe("purple");
+    const fetched = await client.getScheduledTransaction("last-used", created.id);
+    expect(fetched.flag_color).toBe("purple");
+  });
+
+  it("update_scheduled_transaction (PUT) updates flag_color", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+
+    const updated = await client.updateScheduledTransaction("last-used", "sched-rent", {
+      flag_color: "blue",
+    });
+
+    expect(updated.flag_color).toBe("blue");
+    const fetched = await client.getScheduledTransaction("last-used", "sched-rent");
+    expect(fetched.flag_color).toBe("blue");
+  });
+
   it("create_account adds a new manual account visible in subsequent list_accounts calls", async () => {
     const state = createDemoState();
     const client = new YnabClient("demo-token", createDemoFetch(state));
@@ -382,6 +413,33 @@ describe("demo mode — transfers keep the double-entry invariant", () => {
     await client.updateTransaction("last-used", "txn-4019", { amount: -99999 });
     const stillUntouchedMirror = await client.getTransaction("last-used", "txn-4020");
     expect(stillUntouchedMirror.amount).toBe(50000);
+  });
+
+  it("setting category_id on a still-linked transfer leg is ignored, mirroring the create-path invariant", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+
+    const updated = await client.updateTransaction("last-used", "txn-4019", {
+      category_id: "cat-groceries",
+    });
+
+    expect(updated.category_id).toBeNull();
+    expect(updated.transfer_account_id).toBe("acc-savings");
+    const fetched = await client.getTransaction("last-used", "txn-4019");
+    expect(fetched.category_id).toBeNull();
+  });
+
+  it("setting category_id alongside an account change is honored (the link already broke)", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+
+    const updated = await client.updateTransaction("last-used", "txn-4019", {
+      account_id: "acc-credit-card",
+      category_id: "cat-groceries",
+    });
+
+    expect(updated.category_id).toBe("cat-groceries");
+    expect(updated.transfer_account_id).toBeNull();
   });
 });
 

@@ -9,6 +9,16 @@
 // `src/schemas.ts`. Writes mutate the injected state so the demo budget
 // behaves like a real one for the life of the process; tool handlers, schemas,
 // and client methods have no idea they're talking to a fixture.
+//
+// Mutation style is deliberately inconsistent and that's fine: categories,
+// category groups, accounts, and payees are simple flat records with no
+// derived side effects, so their handlers edit them in place
+// (`category.name = ...`). Transactions and scheduled transactions have
+// side effects on write (balance adjustments, transfer-mirror sync/breakage,
+// category activity recompute) that read the *old* values first, so their
+// handlers build a new object and replace the array slot
+// (`state.transactions[idx] = next`) — that pattern is what makes "diff old
+// vs. new" straightforward in `applyTxnPatch`.
 // ============================================================================
 
 import { z } from "zod";
@@ -112,6 +122,7 @@ const SaveScheduledFieldsSchema = z.object({
   payee_name: z.string().nullable().optional(),
   category_id: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
+  flag_color: z.string().nullable().optional(),
 });
 const SaveScheduledBody = z.object({ scheduled_transaction: SaveScheduledFieldsSchema });
 
@@ -211,7 +222,7 @@ function adjustAccountBalance(
 }
 
 function refreshDerived(state: DemoState): void {
-  refreshCategoryActivity(state.categoryGroups, state.transactions);
+  refreshCategoryActivity(state.categoryGroups, state.transactions, state.currentMonth);
 }
 
 /** Every write bumps `server_knowledge` and the budget's `last_modified_on` together. */
@@ -369,6 +380,10 @@ function applyTxnPatch(
     state.transferLinks.delete(existing.id);
     if (mirrorId !== undefined) state.transferLinks.delete(mirrorId);
   }
+  // Mirrors the create-path invariant: a transaction that's still an active
+  // (linked) transfer leg can't be categorized, same as real YNAB. Only
+  // relevant if this same patch didn't just break the link above.
+  const isActiveTransfer = existing.transfer_account_id !== null && !breaksTransferLink;
 
   const oldAmount = existing.amount;
   const oldAccountId = existing.account_id;
@@ -388,7 +403,7 @@ function applyTxnPatch(
   if (fields.approved !== undefined) next.approved = fields.approved;
   if (fields.flag_color !== undefined) next.flag_color = fields.flag_color;
   if (fields.import_id !== undefined) next.import_id = fields.import_id;
-  if (fields.category_id !== undefined) {
+  if (fields.category_id !== undefined && !isActiveTransfer) {
     const resolved = resolveCategoryField(state, fields.category_id);
     next.category_id = resolved.category_id;
     next.category_name = resolved.category_name;
@@ -741,6 +756,11 @@ function routeBudget(
         return {
           transaction_ids: created.map((t) => t.id),
           transactions: created,
+          // Simplification (documented, not a bug): real YNAB dedupes by
+          // `import_id` within a bulk create and reports skipped duplicates
+          // here. This demo never rejects a create, so it's always empty —
+          // `find_duplicates` (src/duplicates.ts) is a separate, purely
+          // client-side check that doesn't depend on this field.
           duplicate_import_ids: [],
         };
       }
@@ -756,7 +776,7 @@ function routeBudget(
       return {
         transaction_ids: updated.map((t) => t.id),
         transactions: updated,
-        duplicate_import_ids: [],
+        duplicate_import_ids: [], // see the create-path comment above
       };
     }
   }
@@ -873,6 +893,7 @@ function routeBudget(
         payee_name: payee.payee_name,
         category_id: category.category_id,
         category_name: category.category_name,
+        flag_color: f.flag_color ?? null,
         deleted: false,
       };
       state.scheduledTransactions.push(scheduled);
@@ -897,6 +918,7 @@ function routeBudget(
       if (f.amount !== undefined) next.amount = f.amount;
       if (f.frequency !== undefined) next.frequency = f.frequency;
       if (f.memo !== undefined) next.memo = f.memo;
+      if (f.flag_color !== undefined) next.flag_color = f.flag_color;
       if (f.category_id !== undefined) {
         const resolved = resolveCategoryField(state, f.category_id);
         next.category_id = resolved.category_id;

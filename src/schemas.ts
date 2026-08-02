@@ -229,6 +229,7 @@ export const ScheduledTransactionSchema = z
     payee_name: z.string().nullable().catch(null),
     category_id: z.string().nullable().catch(null),
     category_name: z.string().nullable().catch(null),
+    flag_color: z.string().nullable().catch(null),
     deleted: z.boolean().catch(false),
   })
   .passthrough();

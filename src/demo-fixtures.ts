@@ -250,14 +250,20 @@ function buildCategoryGroups(): CategoryGroup[] {
   }));
 }
 
-/** Recompute each category's current-month activity/balance from its transactions. */
+/**
+ * Recompute each category's current-month activity/balance from its
+ * transactions. Takes `currentMonth` explicitly (rather than reading the
+ * module-level `CURRENT_MONTH` constant) so `DemoState.currentMonth` stays
+ * the single source of truth — callers pass `state.currentMonth`.
+ */
 export function refreshCategoryActivity(
   groups: CategoryGroup[],
   transactions: Transaction[],
+  currentMonth: string,
 ): void {
   const activityByCategory = new Map<string, number>();
   for (const t of transactions) {
-    if (!t.date.startsWith(CURRENT_MONTH.slice(0, 7))) continue;
+    if (!t.date.startsWith(currentMonth.slice(0, 7))) continue;
     if (t.category_id === null || t.deleted) continue;
     activityByCategory.set(t.category_id, (activityByCategory.get(t.category_id) ?? 0) + t.amount);
   }
@@ -850,6 +856,7 @@ function buildScheduledTransactions(
       payee_name: p("payee-landlord"),
       category_id: "cat-rent",
       category_name: c("cat-rent"),
+      flag_color: "red",
       deleted: false,
     },
     {
@@ -865,6 +872,7 @@ function buildScheduledTransactions(
       payee_name: p("payee-internet"),
       category_id: "cat-internet",
       category_name: c("cat-internet"),
+      flag_color: null,
       deleted: false,
     },
     {
@@ -880,6 +888,7 @@ function buildScheduledTransactions(
       payee_name: p("payee-streaming"),
       category_id: "cat-subscriptions",
       category_name: c("cat-subscriptions"),
+      flag_color: null,
       deleted: false,
     },
     {
@@ -895,6 +904,7 @@ function buildScheduledTransactions(
       payee_name: p("payee-employer"),
       category_id: null,
       category_name: null,
+      flag_color: null,
       deleted: false,
     },
   ];
@@ -940,7 +950,7 @@ export function createDemoState(): DemoState {
   const payees = buildPayees();
   const categoryGroups = buildCategoryGroups();
   const transactions = buildTransactions(accounts, payees, categoryGroups);
-  refreshCategoryActivity(categoryGroups, transactions);
+  refreshCategoryActivity(categoryGroups, transactions, CURRENT_MONTH);
   const scheduledTransactions = buildScheduledTransactions(accounts, payees, categoryGroups);
 
   const totalBudgeted = categoryGroups

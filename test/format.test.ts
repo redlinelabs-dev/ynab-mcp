@@ -166,6 +166,7 @@ describe("formatScheduledTransaction", () => {
     payee_name: "Landlord",
     category_id: "cat-1",
     category_name: "Rent",
+    flag_color: null,
     deleted: false,
   };
 
