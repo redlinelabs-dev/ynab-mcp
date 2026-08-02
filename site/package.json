@@ -12,6 +12,7 @@
     "generate:reference": "node --experimental-strip-types scripts/generate-reference.ts"
   },
   "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.41.5",
     "astro": "^7.1.5"
   }
