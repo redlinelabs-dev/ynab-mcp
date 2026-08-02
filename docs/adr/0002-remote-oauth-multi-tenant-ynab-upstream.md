@@ -1,6 +1,7 @@
 # Remote, multi-tenant server authenticated via OAuth, with YNAB as the upstream identity provider
 
-Status: accepted (supersedes the scaffold's stdio + Personal Access Token model)
+Status: accepted (supersedes the scaffold's stdio + Personal Access Token model; amended by
+ADR-0005 — stdio + PAT is re-promoted to a supported product path, not just a dev escape hatch)
 
 ynab-mcp will be distributed as a **remote** (Streamable HTTP) MCP server that authenticates each
 MCP client with **OAuth** — the "log in via a browser tab" experience. Because a shared instance
@@ -29,3 +30,11 @@ not as the product.
   per-user 200 req/hr limit is _not_ pooled across tenants (good for multi-tenancy).
 - **Read-only by default** means the write tools (`✏️`) need a consent/scope-elevation flow; a
   read-only YNAB token returns `403` on any mutation, which is the secure-by-default backstop.
+
+## Amendment (2026-08-01, see ADR-0005)
+
+The "stdio + PAT is only a local developer escape hatch" framing above is withdrawn. The stdio +
+Personal Access Token mode is a **supported product path** — the five-minute solo on-ramp
+(`npx @redlinelabs/ynab-mcp` + a PAT in the client config), documented first on the public docs
+site. The remote OAuth server remains the recommended home for households, shared instances, and
+the read-only-by-default posture. Everything else in this ADR stands.

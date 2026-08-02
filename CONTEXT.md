@@ -55,9 +55,24 @@ The persisted record of one Tenant's authorization — the encrypted YNAB tokens
 scope (read-only or full), keyed by the OAuth flow rather than by human identity. The unit of
 isolation and of revocation.
 
+**Operator**:
+The person who runs an instance of the server and decides its configuration — which Toolsets are
+exposed, whether it is read-only, and who can reach it on the network. Distinct from a Tenant: an
+Operator hosts; Tenants connect. One person is often both, but the roles never merge.
+_Avoid_: admin, host (ambiguous with the machine).
+
+**Demo mode**:
+A way of running the server against a fictional, canned Budget instead of a real YNAB account — no
+token, no credentials, nothing real at stake. Exists so anyone can try the server from their own
+agent before trusting it with real finances, and so published screenshots are real captures of real
+sessions against fake money.
+_Avoid_: sandbox (YNAB has no sandbox API), simulation (nothing is simulated — the server really
+runs).
+
 **Toolset**:
 A named group of tools (`budgets`, `accounts`, `categories`, `transactions`, `months`, `payees`,
-`scheduled`) that an operator can enable or disable to keep the model's context lean.
+`scheduled`, `money_movements`) that an Operator can enable or disable to keep the model's context
+lean.
 
 **Read-only scope**:
 A YNAB OAuth grant that permits reads but rejects every mutation with `403`. The secure-by-default
