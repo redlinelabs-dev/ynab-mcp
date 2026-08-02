@@ -21,7 +21,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Start here",
-          items: [{ label: "Quick start (PAT)", slug: "start-here/quick-start" }],
+          items: [{ label: "Quick start", slug: "start-here/quick-start" }],
         },
         {
           label: "Connect your agent",

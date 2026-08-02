@@ -5,13 +5,15 @@
 > scheduled transactions. 46 tools across 8 toolsets. Published to npm as
 > `@redlinelabs/ynab-mcp`, MIT licensed. Talks to the YNAB REST API (`https://api.ynab.com/v1`).
 
-## Two ways to run it
+## Three ways to run it
 
-- **stdio + Personal Access Token** — the five-minute solo quick start, via `npx`. One person, one
-  YNAB account, no server to run.
-- **Remote OAuth server** — self-hosted with Docker, for households or shared instances. Anyone who
-  can reach it logs in with their own YNAB account and gets an isolated grant. Read-only by
-  default; write access is an explicit scope elevation.
+- **Demo mode** — `YNAB_DEMO=1 npx @redlinelabs/ynab-mcp`. No YNAB account, no token, nothing to
+  host; runs against a fictional in-memory budget.
+- **Remote OAuth server (recommended)** — self-hosted with Docker, for households or shared
+  instances. Anyone who can reach it logs in with their own YNAB account and gets an isolated
+  grant. Read-only by default; write access is an explicit scope elevation.
+- **stdio + Personal Access Token (alternate)** — via `npx`, for one person who doesn't want to run
+  a server. No server to run, but a single token stands in for a real login.
 
 ## Facts worth knowing before connecting an agent
 
@@ -24,7 +26,7 @@
 
 ## Docs
 
-- Quick start (PAT): https://ynab-mcp.redlinelabs.dev/start-here/quick-start/
+- Quick start (demo, OAuth, PAT): https://ynab-mcp.redlinelabs.dev/start-here/quick-start/
 - Connect your agent: https://ynab-mcp.redlinelabs.dev/connect/claude-desktop/
 - Host your own: https://ynab-mcp.redlinelabs.dev/host-your-own/
 - Trust: https://ynab-mcp.redlinelabs.dev/trust/

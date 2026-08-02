@@ -3,10 +3,11 @@ title: Host your own
 description: Run ynab-mcp as a self-hosted server so more than one person can connect, each with their own YNAB login.
 ---
 
-The [PAT quick start](/start-here/quick-start/) is one person, one token, nothing to run. This
-page is for when you want **more than one person** connecting — a household, a few people you
-trust with an assistant — and each of them logging in with **their own** YNAB account instead of
-sharing a token.
+The [Personal Access Token path](/start-here/quick-start/) is one person, one token, nothing to
+run. This page is for when you want **more than one person** connecting — a household, a few
+people you trust with an assistant — and each of them logging in with **their own** YNAB account
+instead of sharing a token. It's also what makes the recommended OAuth connection method possible
+in the first place: OAuth needs a server to connect *to*, and this is how you stand one up.
 
 ## What you're setting up
 
@@ -14,19 +15,33 @@ A single long-running server, packaged as a Docker container, that speaks MCP ov
 handles the OAuth login for anyone who connects. It's not a cloud service — you run it, on your own
 hardware.
 
-## Network posture: private by default
+## Recommended exposure: `tailscale serve`
 
-This server is meant to be reachable on a **private network**, not the open internet — a LAN IP or
-a [Tailscale](https://tailscale.com/) MagicDNS name (`https://<host>.<tailnet>.ts.net`), which is
-what the bundled `docker-compose.yml` sets up out of the box. "Private" describes where the server
-sits on the network, not a reduction in login security: anyone who reaches it still has to log into
-YNAB with their own account to get anything.
+OAuth needs HTTPS with a certificate a browser and an MCP client will actually trust — a
+self-signed cert means telling every device to trust it by hand, and a real one from a public CA
+means running a public-facing service or paying someone to. The recommended way to get HTTPS
+without either is
+[`tailscale serve`](https://tailscale.com/kb/1312/serve): it terminates HTTPS with a certificate
+trusted by every device on your [Tailscale](https://tailscale.com/) tailnet, on your node's stable
+MagicDNS name (`https://<host>.<tailnet>.ts.net`), by proxying to the plain-HTTP app running
+locally — no certificate to generate, renew, or distribute yourself. That's exactly what the
+bundled `docker-compose.yml` sets up out of the box: a Tailscale sidecar with an inline `serve`
+config that proxies `https://${TS_HOSTNAME}` to the app on `127.0.0.1:8080`.
 
-Why private-by-default: OAuth requires HTTPS, and a stable HTTPS front on the open internet means
-you're either running a public-facing service (with everything that implies for uptime and attack
-surface) or paying a cloud provider to do it for you. Tailscale gives you HTTPS and a stable
-hostname without exposing anything publicly — reach it from any device signed into your tailnet,
-nothing else can. See [How it works](/how-it-works/) if "OAuth requires HTTPS" isn't obvious why.
+`serve` only makes the server reachable from devices signed into your tailnet — not the open
+internet. (Tailscale's other tool, `funnel`, does that, and this setup deliberately doesn't use
+it — the bundled config sets `"AllowFunnel": false`.) "Private" describes where the server sits on
+the network, not a reduction in login security: anyone who reaches it still has to log into YNAB
+with their own account to get anything.
+
+One prerequisite: your tailnet needs **HTTPS certificates** enabled (Tailscale's admin console, or
+the interactive `tailscale serve` CLI will prompt you to turn it on) — the bundled deploy assumes
+it's already on. See [How it works](/how-it-works/) if "OAuth requires HTTPS" isn't obvious why.
+
+If you'd rather not run Tailscale at all, a conventional reverse proxy (e.g. Caddy) in front of the
+app works too — see the alternatives in
+[`docs/DEPLOY.md`](https://github.com/redlinelabs-dev/ynab-mcp/blob/main/docs/DEPLOY.md) — but
+you're then responsible for getting your own trusted certificate onto it.
 
 ## Running it
 
@@ -42,7 +57,7 @@ repo:
 3. **Create a directory with `docker-compose.yml` and a `.env`** holding your Tailscale auth key,
    the YNAB client id/secret, the encryption key, and where you want the data stored.
 4. **`docker compose up -d`.** The bundled compose file runs the server behind a Tailscale sidecar
-   that terminates HTTPS for you — no separate reverse proxy needed.
+   running `tailscale serve` — no separate reverse proxy, no certificate to manage.
 
 ## The OAuth login, in plain English
 

@@ -18,16 +18,16 @@ when the agent's conversation calls for it.
 ## stdio vs. Streamable HTTP (the two transports)
 
 MCP servers can talk to a client over one of two transports. ynab-mcp supports both, and which one
-you use is really a question of "am I running this for myself, or for more than one person":
+you use is really a question of "am I connecting to a running server, or launching my own process":
 
+- **Streamable HTTP** — the server runs continuously and clients connect to it over HTTPS,
+  authenticating via OAuth. This is what [Host your own](/host-your-own/) sets up, and the
+  recommended way to connect once a server exists: one server, reachable by anyone who can reach
+  the network it's on, each person authenticating with their own YNAB login.
 - **stdio** — the client launches the server as a local subprocess and talks to it over
   standard input/output. No network, no port, no auth handshake beyond the environment variable
-  you set. This is what the [Quick start](/start-here/quick-start/) uses: one person, one process,
-  authenticated with a YNAB Personal Access Token (PAT).
-- **Streamable HTTP** — the server runs continuously and clients connect to it over HTTPS,
-  authenticating via OAuth. This is what [Host your own](/host-your-own/) sets up: one server,
-  reachable by anyone who can reach the network it's on, each person authenticating with their own
-  YNAB login.
+  you set. This is what the [Quick start](/start-here/quick-start/)'s demo mode and Personal
+  Access Token (PAT) alternate both use: one person, one process, no server required.
 
 ## OAuth, in this server's specific shape
 
