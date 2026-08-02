@@ -58,6 +58,16 @@ export interface DemoState {
   transactions: Transaction[];
   scheduledTransactions: ScheduledTransaction[];
   serverKnowledge: number;
+  /** ISO timestamp of the last write, surfaced as a budget's `last_modified_on`. */
+  lastModifiedOn: string;
+  /**
+   * Bidirectional link between the two legs of a transfer (transaction id ->
+   * the other leg's transaction id). Not part of any YNAB response shape —
+   * internal bookkeeping so `src/demo.ts` can keep a transfer's two ledger
+   * entries in sync on update/delete without guessing which transaction is
+   * the other side.
+   */
+  transferLinks: Map<string, string>;
   nextId: (prefix: string) => string;
 }
 
@@ -138,7 +148,17 @@ function buildPayees(): Payee[] {
     if (id === undefined || name === undefined) throw new Error("unreachable");
     return { id, name, transfer_account_id: null, deleted: false };
   });
+  // YNAB gives every account a "Transfer : <account>" payee the moment the
+  // account exists, not just once someone actually transfers to it — so the
+  // demo seeds one per fixture account up front (see also the `POST /accounts`
+  // handler in src/demo.ts, which does the same for accounts created mid-session).
   payees.push(
+    {
+      id: "payee-transfer-checking",
+      name: "Transfer : Checking",
+      transfer_account_id: "acc-checking",
+      deleted: false,
+    },
     {
       id: "payee-transfer-savings",
       name: "Transfer : Savings",
@@ -146,9 +166,9 @@ function buildPayees(): Payee[] {
       deleted: false,
     },
     {
-      id: "payee-transfer-checking",
-      name: "Transfer : Checking",
-      transfer_account_id: "acc-checking",
+      id: "payee-transfer-credit-card",
+      name: "Transfer : Rewards Credit Card",
+      transfer_account_id: "acc-credit-card",
       deleted: false,
     },
   );
@@ -902,6 +922,9 @@ function buildMonthSummary(
     income,
     budgeted,
     activity,
+    // Simplification (documented, not a bug): real YNAB lets this go negative
+    // when a budget over-assigns relative to income; the demo clamps at 0 so
+    // the fixture never shows an over-budgeted month.
     to_be_budgeted: Math.max(income - budgeted, 0),
     age_of_money: 42,
     deleted: false,
@@ -925,6 +948,13 @@ export function createDemoState(): DemoState {
     .reduce((sum, c) => sum + c.budgeted, 0);
   const months = DEMO_MONTHS.map((m) => buildMonthSummary(m, transactions, totalBudgeted));
 
+  // The one pre-seeded transfer pair (checking -> savings) — see the
+  // `transfer_account_id`/`payee-transfer-*` wiring in `buildTransactions`.
+  const transferLinks = new Map<string, string>([
+    ["txn-4019", "txn-4020"],
+    ["txn-4020", "txn-4019"],
+  ]);
+
   return {
     budgetId: DEMO_BUDGET_ID,
     budgetName: DEMO_BUDGET_NAME,
@@ -937,6 +967,8 @@ export function createDemoState(): DemoState {
     transactions,
     scheduledTransactions,
     serverKnowledge: 0,
+    lastModifiedOn: new Date().toISOString(),
+    transferLinks,
     nextId: makeIdCounter(),
   };
 }

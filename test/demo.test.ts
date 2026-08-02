@@ -264,6 +264,127 @@ describe("demo mode — write path mutates state", () => {
   });
 });
 
+describe("demo mode — transfers keep the double-entry invariant", () => {
+  it("creating a transaction against a transfer payee creates the mirrored leg", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+    const checkingBefore = await client.getAccount("last-used", "acc-checking");
+    const savingsBefore = await client.getAccount("last-used", "acc-savings");
+
+    const created = await client.createTransaction("last-used", {
+      account_id: "acc-checking",
+      date: "2026-08-30",
+      amount: -25000,
+      payee_id: "payee-transfer-savings",
+      memo: "Extra transfer",
+    });
+
+    expect(created.transfer_account_id).toBe("acc-savings");
+    expect(created.category_id).toBeNull();
+
+    const { transactions: savingsTxns } = await client.listTransactions("last-used", {
+      account_id: "acc-savings",
+    });
+    const mirror = savingsTxns.find(
+      (t) => t.transfer_account_id === "acc-checking" && t.amount === 25000,
+    );
+    expect(mirror).toBeDefined();
+    expect(mirror?.payee_name).toBe("Transfer : Checking");
+    expect(mirror?.memo).toBe("Extra transfer");
+    expect(mirror?.date).toBe("2026-08-30");
+
+    const checkingAfter = await client.getAccount("last-used", "acc-checking");
+    const savingsAfter = await client.getAccount("last-used", "acc-savings");
+    expect(checkingAfter.balance).toBe(checkingBefore.balance - 25000);
+    expect(savingsAfter.balance).toBe(savingsBefore.balance + 25000);
+  });
+
+  it("transferring to an account with no existing transfer payee creates one", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+    const newAccount = await client.createAccount("last-used", {
+      name: "New Checking",
+      type: "checking",
+      balance: 0,
+    });
+    const { payees } = await client.listPayees("last-used");
+    const transferPayee = payees.find((p) => p.transfer_account_id === newAccount.id);
+    if (!transferPayee) throw new Error("expected a transfer payee for the new account");
+
+    const created = await client.createTransaction("last-used", {
+      account_id: "acc-checking",
+      date: "2026-08-30",
+      amount: -1000,
+      payee_id: transferPayee.id,
+    });
+
+    expect(created.transfer_account_id).toBe(newAccount.id);
+    const { transactions } = await client.listTransactions("last-used", {
+      account_id: newAccount.id,
+    });
+    expect(
+      transactions.some((t) => t.amount === 1000 && t.transfer_account_id === "acc-checking"),
+    ).toBe(true);
+  });
+
+  it("updating one leg of a transfer (amount/date/memo) syncs the mirror", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+    // txn-4019 (checking, -50000) / txn-4020 (savings, +50000) is the seeded transfer pair.
+    const checkingBefore = await client.getAccount("last-used", "acc-checking");
+    const savingsBefore = await client.getAccount("last-used", "acc-savings");
+
+    await client.updateTransaction("last-used", "txn-4019", {
+      amount: -75000,
+      date: "2026-08-23",
+      memo: "Adjusted transfer",
+    });
+
+    const mirror = await client.getTransaction("last-used", "txn-4020");
+    expect(mirror.amount).toBe(75000);
+    expect(mirror.date).toBe("2026-08-23");
+    expect(mirror.memo).toBe("Adjusted transfer");
+
+    const checkingAfter = await client.getAccount("last-used", "acc-checking");
+    const savingsAfter = await client.getAccount("last-used", "acc-savings");
+    expect(checkingAfter.balance).toBe(checkingBefore.balance - 25000); // -50000 -> -75000
+    expect(savingsAfter.balance).toBe(savingsBefore.balance + 25000);
+  });
+
+  it("deleting one leg of a transfer deletes the mirror and reverses both balances", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+    const checkingBefore = await client.getAccount("last-used", "acc-checking");
+    const savingsBefore = await client.getAccount("last-used", "acc-savings");
+
+    await client.deleteTransaction("last-used", "txn-4019");
+
+    const { transactions } = await client.listTransactions("last-used");
+    expect(transactions.some((t) => t.id === "txn-4019" || t.id === "txn-4020")).toBe(false);
+
+    const checkingAfter = await client.getAccount("last-used", "acc-checking");
+    const savingsAfter = await client.getAccount("last-used", "acc-savings");
+    expect(checkingAfter.balance).toBe(checkingBefore.balance + 50000);
+    expect(savingsAfter.balance).toBe(savingsBefore.balance - 50000);
+  });
+
+  it("changing a transfer leg's account breaks the mirror link instead of corrupting it", async () => {
+    const state = createDemoState();
+    const client = new YnabClient("demo-token", createDemoFetch(state));
+
+    await client.updateTransaction("last-used", "txn-4019", { account_id: "acc-credit-card" });
+    // The other leg (txn-4020) must be left exactly as it was — no silent
+    // desync of an amount/date it no longer corresponds to.
+    const untouchedMirror = await client.getTransaction("last-used", "txn-4020");
+    expect(untouchedMirror.amount).toBe(50000);
+
+    // Further edits to the moved leg no longer propagate anywhere.
+    await client.updateTransaction("last-used", "txn-4019", { amount: -99999 });
+    const stillUntouchedMirror = await client.getTransaction("last-used", "txn-4020");
+    expect(stillUntouchedMirror.amount).toBe(50000);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Through the tool dispatcher (handleTool), the way the MCP server actually
 // calls into the client — covers toolset/read-only gating in demo mode.

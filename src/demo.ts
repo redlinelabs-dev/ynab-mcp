@@ -78,6 +78,13 @@ const CreateAccountBody = z.object({
   account: z.object({ name: z.string(), type: z.string(), balance: z.number() }),
 });
 
+// Simplification (documented, not a bug): `SaveCategoryFields` (src/client.ts)
+// also sends `note`, `goal_target_date`, and `goal_needs_whole_amount`. They're
+// accepted here (unknown keys are dropped by default, not rejected) but never
+// stored — `CategorySchema` in src/schemas.ts doesn't model them either, and
+// no formatter or tool in this repo reads them back, so there's nothing for
+// the demo to round-trip. Wiring them through would mean growing a live-API
+// contract (CategorySchema) purely to satisfy the fixture.
 const CreateCategoryBody = z.object({
   category: z.object({
     name: z.string(),
@@ -207,6 +214,70 @@ function refreshDerived(state: DemoState): void {
   refreshCategoryActivity(state.categoryGroups, state.transactions);
 }
 
+/** Every write bumps `server_knowledge` and the budget's `last_modified_on` together. */
+function bumpServerKnowledge(state: DemoState): void {
+  state.serverKnowledge += 1;
+  state.lastModifiedOn = new Date().toISOString();
+}
+
+/**
+ * Find the payee that represents "this is a transfer to `accountId`" (i.e.
+ * its `transfer_account_id` is `accountId`), creating one if this is the
+ * first transfer ever made to that account in this session — matching how
+ * YNAB lazily creates the paired transfer payee for a new account.
+ */
+function findOrCreateTransferPayee(state: DemoState, accountId: string): Payee {
+  const existing = state.payees.find((p) => !p.deleted && p.transfer_account_id === accountId);
+  if (existing) return existing;
+  const account = findAccount(state, accountId);
+  const created: Payee = {
+    id: state.nextId("payee"),
+    name: `Transfer : ${account.name}`,
+    transfer_account_id: accountId,
+    deleted: false,
+  };
+  state.payees.push(created);
+  return created;
+}
+
+/**
+ * Create the other leg of a transfer: an inverse-amount transaction on the
+ * destination account, using (or creating) the transfer payee that points
+ * back at `source`'s account. Links the two legs in `state.transferLinks` so
+ * `applyTxnPatch`/`deleteTransactionEntity` can keep them in sync.
+ */
+function createTransferMirror(
+  state: DemoState,
+  source: Transaction,
+  destinationAccountId: string,
+): void {
+  const destinationAccount = findAccount(state, destinationAccountId);
+  const mirrorPayee = findOrCreateTransferPayee(state, source.account_id);
+  const mirror: Transaction = {
+    id: state.nextId("txn"),
+    date: source.date,
+    amount: -source.amount,
+    memo: source.memo,
+    cleared: source.cleared,
+    approved: source.approved,
+    flag_color: null,
+    account_id: destinationAccount.id,
+    account_name: destinationAccount.name,
+    payee_id: mirrorPayee.id,
+    payee_name: mirrorPayee.name,
+    category_id: null,
+    category_name: null,
+    import_id: null,
+    transfer_account_id: source.account_id,
+    subtransactions: [],
+    deleted: false,
+  };
+  state.transactions.push(mirror);
+  adjustAccountBalance(state, mirror.account_id, mirror.amount, mirror.cleared);
+  state.transferLinks.set(source.id, mirror.id);
+  state.transferLinks.set(mirror.id, source.id);
+}
+
 // ---------------------------------------------------------------------------
 // Transaction create / patch / delete
 // ---------------------------------------------------------------------------
@@ -217,8 +288,17 @@ function createTransactionEntity(state: DemoState, fields: SaveTxnFields): Trans
   if (fields.amount === undefined) throw new DemoApiError(400, "amount is required");
 
   const account = findAccount(state, fields.account_id);
-  const category = resolveCategoryField(state, fields.category_id);
   const payee = resolvePayee(state, fields.payee_id, fields.payee_name);
+  const payeeEntity = payee.payee_id
+    ? state.payees.find((p) => p.id === payee.payee_id && !p.deleted)
+    : undefined;
+  const transferAccountId = payeeEntity?.transfer_account_id ?? null;
+  // A transfer payee wins over any explicit category_id: real YNAB doesn't
+  // allow categorizing a transfer between two on-budget accounts, which is
+  // the only kind of account this demo has.
+  const category = transferAccountId
+    ? { category_id: null, category_name: null }
+    : resolveCategoryField(state, fields.category_id);
   const cleared = fields.cleared ?? "cleared";
 
   const legs = (fields.subtransactions ?? []).map((s) => {
@@ -251,14 +331,17 @@ function createTransactionEntity(state: DemoState, fields: SaveTxnFields): Trans
     category_id: category.category_id,
     category_name: category.category_name,
     import_id: fields.import_id ?? null,
-    transfer_account_id: null,
+    transfer_account_id: transferAccountId,
     subtransactions: legs,
     deleted: false,
   };
 
   state.transactions.push(txn);
-  state.serverKnowledge += 1;
+  bumpServerKnowledge(state);
   adjustAccountBalance(state, txn.account_id, txn.amount, txn.cleared);
+  if (transferAccountId) {
+    createTransferMirror(state, txn, transferAccountId);
+  }
   refreshDerived(state);
   return txn;
 }
@@ -268,11 +351,31 @@ function applyTxnPatch(
   existing: Transaction,
   fields: SaveTxnFields,
 ): Transaction {
+  // Simplification (documented, not a bug): changing the account or payee of
+  // one leg of a transfer decouples it from its mirror. Real YNAB would
+  // either reject that or re-derive a new pairing; this demo takes the
+  // simpler path of severing the link — both legs become ordinary,
+  // independently-editable transactions from that point on, rather than
+  // risking a mirror update against a leg it no longer actually corresponds
+  // to. Amount/date/memo/cleared/approved edits keep syncing right up until
+  // the account or payee changes.
+  const changesAccountOrPayee =
+    fields.account_id !== undefined ||
+    fields.payee_id !== undefined ||
+    fields.payee_name !== undefined;
+  const breaksTransferLink = changesAccountOrPayee && state.transferLinks.has(existing.id);
+  if (breaksTransferLink) {
+    const mirrorId = state.transferLinks.get(existing.id);
+    state.transferLinks.delete(existing.id);
+    if (mirrorId !== undefined) state.transferLinks.delete(mirrorId);
+  }
+
   const oldAmount = existing.amount;
   const oldAccountId = existing.account_id;
   const oldCleared = existing.cleared;
 
   const next: Transaction = { ...existing };
+  if (breaksTransferLink) next.transfer_account_id = null;
   if (fields.account_id !== undefined) {
     const account = findAccount(state, fields.account_id);
     next.account_id = account.id;
@@ -303,6 +406,33 @@ function applyTxnPatch(
   adjustAccountBalance(state, oldAccountId, -oldAmount, oldCleared);
   adjustAccountBalance(state, next.account_id, next.amount, next.cleared);
 
+  const mirrorId = state.transferLinks.get(existing.id);
+  if (mirrorId !== undefined) {
+    const mirrorIdx = state.transactions.findIndex((t) => t.id === mirrorId);
+    const mirror = mirrorIdx === -1 ? undefined : state.transactions[mirrorIdx];
+    if (mirror !== undefined) {
+      const oldMirrorAmount = mirror.amount;
+      const oldMirrorAccountId = mirror.account_id;
+      const oldMirrorCleared = mirror.cleared;
+      const updatedMirror: Transaction = {
+        ...mirror,
+        date: next.date,
+        memo: next.memo,
+        cleared: next.cleared,
+        approved: next.approved,
+        amount: -next.amount,
+      };
+      state.transactions[mirrorIdx] = updatedMirror;
+      adjustAccountBalance(state, oldMirrorAccountId, -oldMirrorAmount, oldMirrorCleared);
+      adjustAccountBalance(
+        state,
+        updatedMirror.account_id,
+        updatedMirror.amount,
+        updatedMirror.cleared,
+      );
+    }
+  }
+
   return next;
 }
 
@@ -313,7 +443,22 @@ function deleteTransactionEntity(state: DemoState, id: string): Transaction {
   const deleted: Transaction = { ...existing, deleted: true };
   state.transactions[idx] = deleted;
   adjustAccountBalance(state, existing.account_id, -existing.amount, existing.cleared);
-  state.serverKnowledge += 1;
+  bumpServerKnowledge(state);
+
+  // Deleting one leg of a transfer deletes both — matches real YNAB, which
+  // never leaves a transfer with only one side of the ledger entry.
+  const mirrorId = state.transferLinks.get(id);
+  if (mirrorId !== undefined) {
+    const mirrorIdx = state.transactions.findIndex((t) => t.id === mirrorId);
+    const mirror = mirrorIdx === -1 ? undefined : state.transactions[mirrorIdx];
+    if (mirror !== undefined && !mirror.deleted) {
+      state.transactions[mirrorIdx] = { ...mirror, deleted: true };
+      adjustAccountBalance(state, mirror.account_id, -mirror.amount, mirror.cleared);
+    }
+    state.transferLinks.delete(id);
+    state.transferLinks.delete(mirrorId);
+  }
+
   refreshDerived(state);
   return deleted;
 }
@@ -361,7 +506,7 @@ function budgetSummary(state: DemoState, includeAccounts: boolean): Record<strin
   return {
     id: state.budgetId,
     name: state.budgetName,
-    last_modified_on: new Date().toISOString(),
+    last_modified_on: state.lastModifiedOn,
     first_month: state.months[0] ?? null,
     last_month: state.months[state.months.length - 1] ?? null,
     currency_format: state.currency,
@@ -472,7 +617,12 @@ function routeBudget(
         deleted: false,
       };
       state.accounts.push(account);
-      state.serverKnowledge += 1;
+      // Every account gets its "Transfer : <account>" payee immediately, the
+      // way real YNAB does — not lazily on first use. `findOrCreateTransferPayee`
+      // is still a fallback for the (currently unreachable) case of a transfer
+      // targeting an account that somehow has none.
+      findOrCreateTransferPayee(state, account.id);
+      bumpServerKnowledge(state);
       return { account };
     }
   }
@@ -516,7 +666,7 @@ function routeBudget(
         deleted: false,
       };
       group.categories.push(category);
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { category };
     }
   }
@@ -529,7 +679,7 @@ function routeBudget(
       if (parsed.category.name !== undefined) category.name = parsed.category.name;
       if (parsed.category.goal_target !== undefined)
         category.goal_target = parsed.category.goal_target;
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { category };
     }
   }
@@ -559,14 +709,14 @@ function routeBudget(
       categories: [],
     };
     state.categoryGroups.push(group);
-    state.serverKnowledge += 1;
+    bumpServerKnowledge(state);
     return { category_group: group };
   }
   if (rest.length === 2 && rest[0] === "category_groups" && method === "PATCH") {
     const parsed = SaveCategoryGroupBody.parse(body);
     const group = findCategoryGroup(state, requireSegment(rest, 1));
     group.name = parsed.category_group.name;
-    state.serverKnowledge += 1;
+    bumpServerKnowledge(state);
     return { category_group: group };
   }
 
@@ -601,7 +751,7 @@ function routeBudget(
       const updated = parsed.transactions.map(({ id, ...fields }) =>
         applyTxnPatch(state, findTransaction(state, id), fields),
       );
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       refreshDerived(state);
       return {
         transaction_ids: updated.map((t) => t.id),
@@ -624,7 +774,7 @@ function routeBudget(
     if (method === "PUT") {
       const parsed = SingleTxnBody.parse(body);
       const updated = applyTxnPatch(state, findTransaction(state, id), parsed.transaction);
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       refreshDerived(state);
       return { transaction: updated };
     }
@@ -650,7 +800,7 @@ function routeBudget(
         deleted: false,
       };
       state.payees.push(payee);
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { payee };
     }
   }
@@ -661,7 +811,7 @@ function routeBudget(
       const parsed = SavePayeeBody.parse(body);
       const payee = findPayee(state, payeeId);
       payee.name = parsed.payee.name;
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { payee };
     }
   }
@@ -726,7 +876,7 @@ function routeBudget(
         deleted: false,
       };
       state.scheduledTransactions.push(scheduled);
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { scheduled_transaction: scheduled };
     }
   }
@@ -760,7 +910,7 @@ function routeBudget(
       const idx = state.scheduledTransactions.findIndex((s) => s.id === id);
       if (idx === -1) throw new DemoApiError(404, `Unknown demo scheduled_transaction_id: ${id}`);
       state.scheduledTransactions[idx] = next;
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { scheduled_transaction: next };
     }
     if (method === "DELETE") {
@@ -769,7 +919,7 @@ function routeBudget(
       if (idx === -1) throw new DemoApiError(404, `Unknown demo scheduled_transaction_id: ${id}`);
       const deleted: ScheduledTransaction = { ...existing, deleted: true };
       state.scheduledTransactions[idx] = deleted;
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { scheduled_transaction: deleted };
     }
   }
@@ -798,7 +948,7 @@ function routeBudget(
       const category = findCategory(state, categoryId);
       category.budgeted = parsed.category.budgeted;
       category.balance = category.budgeted + category.activity;
-      state.serverKnowledge += 1;
+      bumpServerKnowledge(state);
       return { category };
     }
   }
