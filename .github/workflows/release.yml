@@ -42,9 +42,10 @@ jobs:
       # runner's bundled npm is ever older instead of dying cryptically inside npm publish.
       - name: Ensure npm supports OIDC trusted publishing
         run: |
-          v=$(npm --version)
-          echo "npm $v"
-          node -e "const [M, m] = '$v'.split('.').map(Number); if (M < 11 || (M === 11 && m < 5)) { console.error('npm ' + '$v' + ' is too old for trusted publishing (need >= 11.5.1)'); process.exit(1); }"
+          NPM_VERSION=$(npm --version)
+          echo "npm $NPM_VERSION"
+          export NPM_VERSION
+          node -e "const [M, m, p] = process.env.NPM_VERSION.split('.').map(Number); if (M < 11 || (M === 11 && (m < 5 || (m === 5 && p < 1)))) { console.error('npm ' + process.env.NPM_VERSION + ' is too old for trusted publishing (need >= 11.5.1)'); process.exit(1); }"
       - run: npm ci
       - run: npm run build
       # Auth comes from npm's trusted-publisher config for this repo + workflow
