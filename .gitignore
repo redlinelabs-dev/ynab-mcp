@@ -9,3 +9,7 @@ Plans/
 MEMORY/
 .atrium/
 .mcp.json
+
+# Local agent state (worktrees, local settings) — but skills are versioned
+.claude/*
+!.claude/skills/
