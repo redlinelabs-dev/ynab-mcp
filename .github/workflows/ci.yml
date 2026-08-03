@@ -17,3 +17,22 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+
+  # Typechecks, lints, formats, unit-tests, and builds the docs site under site/. The root
+  # package is built first because site/scripts/generate-reference.ts imports types and the
+  # TOOLS array from its compiled dist/ output.
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: site
+      - run: npm run check
+        working-directory: site
+      - run: npm run build
+        working-directory: site

@@ -20,6 +20,9 @@
     "rootDir": "src",
     "outDir": "dist",
     "sourceMap": true,
+    // Also lets site/scripts/* resolve types (ToolDef, Endpoint, ToolGroup) from dist/*.js
+    // under `astro check` — see site/scripts/reference-format.ts.
+    "declaration": true,
 
     /* If your code doesn't run in the DOM: */
     "lib": ["es2022"],

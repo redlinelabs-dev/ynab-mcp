@@ -7,7 +7,7 @@ The [Personal Access Token path](/start-here/quick-start/) is one person, one to
 run. This page is for when you want **more than one person** connecting — a household, a few
 people you trust with an assistant — and each of them logging in with **their own** YNAB account
 instead of sharing a token. It's also what makes the recommended OAuth connection method possible
-in the first place: OAuth needs a server to connect *to*, and this is how you stand one up.
+in the first place: OAuth needs a server to connect _to_, and this is how you stand one up.
 
 ## What you're setting up
 
