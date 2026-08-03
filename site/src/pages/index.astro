@@ -3,6 +3,8 @@
 // (the atrium-site pattern). Self-contained: no external fonts, scripts, or trackers.
 // Every claim here has to hold up next to the Trust page — see docs/adr/0005 and
 // keel's claims rule (test/docs.test.ts pins the load-bearing ones).
+import { OG_IMAGE, OG_IMAGE_ALT, OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, SITE_URL } from "../seo";
+
 const description =
   "ynab-mcp connects an AI agent to your YNAB budget — balances, categories, transactions, splits, " +
   "spending summaries — over the Model Context Protocol. Read-only by default; bank linking is " +
@@ -17,11 +19,20 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ynab-mcp — connect an AI agent to your YNAB budget</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={`${SITE_URL}/`} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta property="og:title" content="ynab-mcp — connect an AI agent to your YNAB budget" />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ynab-mcp.redlinelabs.dev/" />
+    <meta property="og:url" content={`${SITE_URL}/`} />
+    <meta property="og:site_name" content="ynab-mcp" />
+    <meta property="og:locale" content="en" />
+    <meta property="og:image" content={OG_IMAGE} />
+    <meta property="og:image:width" content={OG_IMAGE_WIDTH} />
+    <meta property="og:image:height" content={OG_IMAGE_HEIGHT} />
+    <meta property="og:image:alt" content={OG_IMAGE_ALT} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={OG_IMAGE} />
     <meta name="color-scheme" content="light dark" />
   </head>
   <body>
@@ -108,7 +119,7 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
                 already runs); anyone who can reach it logs in with <strong>their own</strong> YNAB
                 account over OAuth and gets an isolated, read-only-by-default grant.
               </p>
-              <a href="/host-your-own/">Host your own →</a>
+              <a href="/host-your-own/">Set up an OAuth server for your household →</a>
             </div>
             <div class="mode-card">
               <h3>Demo mode — try it now</h3>
@@ -117,7 +128,7 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
                 nothing to host. Runs against a fictional in-memory budget so you can see the
                 tools work before deciding on a real setup.
               </p>
-              <a href="/start-here/quick-start/">Quick start →</a>
+              <a href="/start-here/quick-start/">Run demo mode in the quick start →</a>
             </div>
             <div class="mode-card">
               <h3>Personal Access Token — alternate</h3>
@@ -126,7 +137,7 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
                 Real budget access, nothing to host, for one person who doesn't want to run a
                 server.
               </p>
-              <a href="/start-here/quick-start/">Quick start →</a>
+              <a href="/start-here/quick-start/">Get a YNAB Personal Access Token →</a>
             </div>
           </div>
         </div>
@@ -137,7 +148,8 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
           <h2 class="section-title">46 tools, 8 toolsets</h2>
           <p class="section-lede">
             Every tool wraps one YNAB API operation with a backlink to it — enable only the
-            toolsets a given agent needs to keep its context lean.
+            <a href="/how-it-works/#toolsets">toolsets</a> a given agent needs to keep its context
+            lean.
           </p>
           <div class="tool-grid">
             <a class="tool-pill" href="/reference/budgets/">Budgets</a>
@@ -149,7 +161,9 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
             <a class="tool-pill" href="/reference/scheduled/">Scheduled transactions</a>
             <a class="tool-pill" href="/reference/money_movements/">Money movements</a>
           </div>
-          <p class="tools-more"><a href="/reference/budgets/">Full tool reference →</a></p>
+          <p class="tools-more">
+            <a href="/reference/budgets/">Browse the full YNAB tool reference →</a>
+          </p>
         </div>
       </section>
     </main>

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Budgets"
-description: "Generated tool reference for the budgets toolset (4 tools)."
+description: "List the YNAB budgets this server can reach, read one by id or the last-used / default alias, check its currency and date-format settings, and confirm which YNAB user it is authenticated as."
 ---
 
 <!--
@@ -19,6 +19,10 @@ optional `budget_id` — leave it out and the server falls back to `YNAB_BUDGET_
 
 `get_user` lives in this group too: it just confirms which YNAB account the server is
 authenticated as.
+
+Every tool below is a read — nothing in this
+[toolset changes a budget](/how-it-works/#toolsets), so it survives the read-only default
+described in [what ynab-mcp can and cannot do](/trust/#read-only-by-default).
 
 ## Tools
 

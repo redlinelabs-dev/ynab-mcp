@@ -1,6 +1,6 @@
 ---
 title: Claude Code
-description: Connect Claude Code to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
+description: Add ynab-mcp to Claude Code with `claude mcp add`, then authenticate over OAuth from `/mcp` — or run it as a stdio subprocess with a YNAB Personal Access Token instead.
 ---
 
 ## Connect to a server (OAuth) — recommended

@@ -1,6 +1,6 @@
 ---
 title: Claude Desktop
-description: Connect Claude Desktop to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
+description: Point Claude Desktop at a self-hosted ynab-mcp server as a custom connector, or add it to claude_desktop_config.json as a stdio server with a YNAB Personal Access Token.
 ---
 
 ## Connect to a server (OAuth) — recommended

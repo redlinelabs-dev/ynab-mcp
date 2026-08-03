@@ -1,6 +1,6 @@
 ---
 title: Codex CLI
-description: Connect OpenAI Codex CLI to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
+description: Configure ynab-mcp in Codex CLI's ~/.codex/config.toml — a server URL plus `codex mcp login` for OAuth, or `codex mcp add` with a YNAB Personal Access Token.
 ---
 
 Codex stores MCP server config in `~/.codex/config.toml` (or a project-scoped `.codex/config.toml`

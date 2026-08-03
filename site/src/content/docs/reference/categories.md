@@ -1,6 +1,6 @@
 ---
 title: "Reference: Categories"
-description: "Generated tool reference for the categories toolset (8 tools)."
+description: "Read category groups, categories, and a category's figures for a given month — then rename them, move them between groups, or set a month's budgeted amount in milliunits."
 ---
 
 <!--
@@ -15,6 +15,11 @@ budgeted amount, activity, and balance for a given month. Categories live inside
 Two tools here operate on a specific month (`update_category_budget`, `get_month_category`); the
 rest operate on the category's own record. Note: the YNAB API has no endpoint for reordering
 categories within a group, so no tool here can do that either.
+
+`update_category_budget` takes its `budgeted` amount in
+[milliunits](/how-it-works/#milliunits) — `1000` is one currency unit, so budgeting $250 means
+sending `250000`. Five of the eight tools here write; all five disappear under the read-only
+default — see [what read-only actually changes](/trust/#read-only-by-default).
 
 ## Tools
 

@@ -1,0 +1,101 @@
+---
+// Starlight <head> override (wired via `components.Head` in astro.config.mjs).
+//
+// Renders Starlight's own head untouched, then adds two things it doesn't emit:
+//
+//   1. og:image / twitter:image. Starlight already declares `twitter:card:
+//      summary_large_image` on every doc page, which without an image is a broken
+//      declaration — the card has nothing to render. The fix is the image, not the removal:
+//      site/public/og.png, a committed PNG (source: site/assets/og-card.svg). Flagged as
+//      link-unfurl hygiene, not SEO — Open Graph is not a Google Search signal.
+//
+//   2. BreadcrumbList JSON-LD, derived from the sidebar Starlight already built for this
+//      page, so the markup describes navigation that is genuinely on the page and can't
+//      drift from it. Breadcrumb is one of the rich results Google still supports.
+//      Deliberately the *only* structured data here: no FAQPage or HowTo (both retired as
+//      rich results), and no SoftwareApplication (its rich result needs an aggregateRating
+//      or review, and there are no genuine third-party ratings to point at).
+//
+// Adds no client JavaScript: the JSON-LD block is inert `application/ld+json` data.
+// See docs/research/seo-current-practices.md §2.1, §2.2, §5.1.
+
+import Default from "@astrojs/starlight/components/Head.astro";
+
+import { OG_IMAGE, OG_IMAGE_ALT, OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, SITE_URL } from "../seo";
+
+const { sidebar } = Astro.locals.starlightRoute;
+
+type SidebarEntry = (typeof sidebar)[number];
+type Crumb = { name: string; item: string };
+
+/** The first real page inside a sidebar group — the URL its label points at in practice. */
+function firstHref(entry: SidebarEntry): string | undefined {
+  if (entry.type === "link") return entry.href;
+  for (const child of entry.entries) {
+    const href = firstHref(child);
+    if (href !== undefined) return href;
+  }
+  return undefined;
+}
+
+/**
+ * The trail of sidebar labels leading to the current page, outermost first.
+ *
+ * A group contributes a crumb pointing at its first page (the same target the landing
+ * page's "Reference" nav link uses). When that first page *is* the current page, the group
+ * crumb is dropped rather than emitted with a duplicate URL: this page is the section root,
+ * so `Home > Page` is the shortest true path.
+ */
+function trailTo(entries: SidebarEntry[]): Crumb[] | undefined {
+  for (const entry of entries) {
+    if (entry.type === "link") {
+      if (entry.isCurrent) return [{ name: entry.label, item: entry.href }];
+      continue;
+    }
+    const inner = trailTo(entry.entries);
+    if (inner === undefined) continue;
+    const groupHref = firstHref(entry);
+    if (groupHref === undefined || groupHref === inner[0]?.item) return inner;
+    return [{ name: entry.label, item: groupHref }, ...inner];
+  }
+  return undefined;
+}
+
+const crumbs: Crumb[] = [
+  { name: "Home", item: `${SITE_URL}/` },
+  ...(trailTo(sidebar) ?? []).map(({ name, item }) => ({
+    name,
+    item: new URL(item, SITE_URL).href,
+  })),
+];
+
+// Google's breadcrumb rich result needs at least two ListItems; a page we couldn't locate
+// in the sidebar would leave only "Home", so emit nothing rather than an invalid list.
+const breadcrumbs =
+  crumbs.length > 1
+    ? {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: crumbs.map((crumb, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: crumb.name,
+          item: crumb.item,
+        })),
+      }
+    : undefined;
+---
+
+<Default><slot /></Default>
+
+<meta property="og:image" content={OG_IMAGE} />
+<meta property="og:image:width" content={OG_IMAGE_WIDTH} />
+<meta property="og:image:height" content={OG_IMAGE_HEIGHT} />
+<meta property="og:image:alt" content={OG_IMAGE_ALT} />
+<meta name="twitter:image" content={OG_IMAGE} />
+
+{
+  breadcrumbs && (
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(breadcrumbs)} />
+  )
+}

@@ -1,0 +1,41 @@
+# ynab-mcp docs — https://ynab-mcp.redlinelabs.dev
+#
+# Everything here is public documentation for an MIT-licensed open-source tool, so the
+# policy is: crawl all of it. robots.txt is used here only to manage crawl traffic and to
+# advertise the sitemap — it is not, and cannot be, an indexing control.
+# https://developers.google.com/search/docs/crawling-indexing/robots/intro
+
+User-agent: *
+Allow: /
+
+# AI crawlers are allowed deliberately, not by omission.
+#
+# Google-Extended governs whether crawled content may be used for Gemini training and for
+# grounding in Gemini apps. It is orthogonal to Search: blocking it changes nothing about
+# inclusion or ranking in Google Search. We allow it because this project's audience is
+# people running AI agents, and being absent from the systems they use would be
+# self-defeating.
+# https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://ynab-mcp.redlinelabs.dev/sitemap-index.xml

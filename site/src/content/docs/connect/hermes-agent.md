@@ -1,6 +1,6 @@
 ---
 title: hermes-agent
-description: Connect hermes-agent to ynab-mcp — OAuth to a server is recommended where hermes-agent supports it, with a Personal Access Token as the alternate.
+description: Add ynab-mcp under mcp_servers in hermes-agent's ~/.hermes/config.yaml — remote MCP over OAuth (unverified against this harness), a static bearer header for headless boxes, or a local stdio launch.
 ---
 
 hermes-agent has a built-in MCP client configured under the `mcp_servers` key in

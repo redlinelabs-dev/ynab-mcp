@@ -11,6 +11,14 @@ an account. A few tools are worth calling out:
   you've confirmed which one is the duplicate.
 - **Bulk operations.** `bulk_update_transactions` and `bulk_create_transactions` do many
   transactions in one API call — prefer them over a loop of single calls, both for speed and
-  because the YNAB API is rate-limited to 200 requests/hour.
+  because the YNAB API is rate-limited to 200 requests/hour (see
+  [why the rate limit matters and which tools avoid it](/trust/#the-rate-limit-is-real-and-shared)).
 - **Import.** `import_transactions` triggers a refresh on accounts already bank-linked in the YNAB
-  app. It cannot create that link — see [Accounts](/reference/accounts/).
+  app. It cannot create that link — see
+  [the Accounts toolset](/reference/accounts/) and
+  [why bank linking is impossible here](/trust/#what-this-server-cannot-do).
+
+Every `amount` on this page is in [milliunits](/how-it-works/#milliunits): `12340` is $12.34, and
+an outflow is negative. Six of the thirteen tools write; running read-only leaves only the
+browsing, duplicate-detection, and summary tools — see
+[what read-only actually changes](/trust/#read-only-by-default).

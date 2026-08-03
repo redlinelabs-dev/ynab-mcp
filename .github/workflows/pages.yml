@@ -32,6 +32,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone: astro.config.mjs derives each
+          # sitemap entry's <lastmod> from `git log -1` on the page's own source file.
+          # With fetch-depth: 1 every file would report the tip commit's date, which is
+          # exactly the "stamped on every deploy" inaccuracy the tag must not have — the
+          # config omits lastmod when git can't answer, so a shallow clone would silently
+          # publish a sitemap with no dates at all.
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

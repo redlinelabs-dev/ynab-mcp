@@ -1,6 +1,6 @@
 ---
 title: Generic MCP client
-description: Connect any MCP-capable client to ynab-mcp — OAuth to a server is recommended, with a Personal Access Token as the alternate.
+description: What any MCP client needs to reach ynab-mcp, in whatever config format it uses — a server URL for OAuth (dynamic client registration, RFC 7591), a bearer header if it can't do a browser login, or a launch command and a token.
 ---
 
 Not using one of the harnesses with its own page? Every MCP client needs the same information,

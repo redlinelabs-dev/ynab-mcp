@@ -37,6 +37,43 @@ const GROUP_TITLES: Record<ToolGroup, string> = {
   money_movements: "Money movements",
 };
 
+// The frontmatter `description` for each group page — Starlight turns it into the page's
+// <meta name="description"> and og:description.
+//
+// Hand-written per group rather than templated from the group name and tool count, because
+// one string reshaped eight ways is exactly the boilerplate Google names as a reason to
+// ignore a description and rewrite a title. Each of these says what its toolset actually
+// does, and, like every other claim on this site, has to be falsifiable against `TOOLS` —
+// keep them true when tools are added or removed.
+const GROUP_DESCRIPTIONS: Record<ToolGroup, string> = {
+  budgets:
+    "List the YNAB budgets this server can reach, read one by id or the last-used / default " +
+    "alias, check its currency and date-format settings, and confirm which YNAB user it is " +
+    "authenticated as.",
+  accounts:
+    "List and read the accounts in a YNAB budget, and create manual ones. Linking an account " +
+    "to a bank is possible only in the YNAB app, so no tool here can do it.",
+  categories:
+    "Read category groups, categories, and a category's figures for a given month — then " +
+    "rename them, move them between groups, or set a month's budgeted amount in milliunits.",
+  transactions:
+    "The largest toolset: browse transactions by account, category, payee, or month; create " +
+    "them, splits included; update, delete, and bulk-write many in one API call; flag likely " +
+    "duplicates; and summarise spending without reading every row.",
+  months:
+    "Read a YNAB budget's monthly summaries — income, budgeted, activity, and to-be-budgeted — " +
+    "for every month or for one month with its full category breakdown.",
+  payees:
+    "List, read, create, and rename the payees in a YNAB budget, and read the GPS locations " +
+    "the YNAB mobile app recorded against them. The location tools are read-only.",
+  scheduled:
+    "Create, read, update, and delete YNAB scheduled transactions — the recurring or " +
+    "future-dated templates themselves, with their next date and frequency.",
+  money_movements:
+    "Read YNAB's money movement records, across a whole budget or scoped to one month, " +
+    "individually or by group. Every tool in this toolset is read-only.",
+};
+
 // Field names that carry a monetary amount in milliunits (1000 = one currency unit) —
 // see CLAUDE.md. Anything in this set gets a callout on the tool's page. Kept as a flat
 // name set rather than inferred from the JSON schema because the schema has no type that
@@ -130,9 +167,7 @@ function readPreamble(group: ToolGroup): string {
 function renderGroupPage(group: ToolGroup): string {
   const tools = TOOLS.filter((t) => t.group === group).sort((a, b) => a.name.localeCompare(b.name));
   const title = `Reference: ${GROUP_TITLES[group]}`;
-  const description = `Generated tool reference for the ${group} toolset (${tools.length} tool${
-    tools.length === 1 ? "" : "s"
-  }).`;
+  const description = GROUP_DESCRIPTIONS[group];
   const preamble = readPreamble(group);
   const generatedBody = tools.map(renderTool).join("\n\n");
   return [
