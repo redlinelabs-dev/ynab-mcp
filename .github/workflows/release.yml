@@ -33,11 +33,18 @@ jobs:
       contents: read
       id-token: write # OIDC: npm trusted publishing + provenance — no token secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 24 # bundles npm >= 11.5, which does the OIDC exchange itself
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1 for the OIDC exchange; fail legibly if the
+      # runner's bundled npm is ever older instead of dying cryptically inside npm publish.
+      - name: Ensure npm supports OIDC trusted publishing
+        run: |
+          v=$(npm --version)
+          echo "npm $v"
+          node -e "const [M, m] = '$v'.split('.').map(Number); if (M < 11 || (M === 11 && m < 5)) { console.error('npm ' + '$v' + ' is too old for trusted publishing (need >= 11.5.1)'); process.exit(1); }"
       - run: npm ci
       - run: npm run build
       # Auth comes from npm's trusted-publisher config for this repo + workflow

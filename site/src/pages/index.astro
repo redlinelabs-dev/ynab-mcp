@@ -26,7 +26,7 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
     <meta property="og:type" content="website" />
     <meta property="og:url" content={`${SITE_URL}/`} />
     <meta property="og:site_name" content="ynab-mcp" />
-    <meta property="og:locale" content="en" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:image" content={OG_IMAGE} />
     <meta property="og:image:width" content={OG_IMAGE_WIDTH} />
     <meta property="og:image:height" content={OG_IMAGE_HEIGHT} />
@@ -77,10 +77,11 @@ const REPO = "https://github.com/redlinelabs-dev/ynab-mcp";
       <section class="strip" aria-label="What ynab-mcp promises">
         <div class="container strip-inner">
           <div class="strip-item">
-            <h3>Read-only by default</h3>
+            <h3>Writes are an explicit choice</h3>
             <p>
-              Every mode starts read-only. Write access — creating or editing transactions,
-              budgeting — is an explicit choice, not the default.
+              OAuth connections start read-only — writing needs a deliberate scope elevation at
+              login. Token mode inherits the token's own YNAB access; setting
+              <code>YNAB_READ_ONLY=true</code> is the one-line way to get the same guarantee.
             </p>
           </div>
           <div class="strip-item">
