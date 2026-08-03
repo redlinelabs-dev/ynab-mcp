@@ -31,15 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # npm provenance
+      id-token: write # OIDC: npm trusted publishing + provenance — no token secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24 # bundles npm >= 11.5, which does the OIDC exchange itself
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
-      - run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Auth comes from npm's trusted-publisher config for this repo + workflow
+      # (npmjs.com package settings); provenance is generated automatically under OIDC.
+      - run: npm publish
