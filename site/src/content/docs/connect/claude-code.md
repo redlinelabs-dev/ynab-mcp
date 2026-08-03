@@ -31,3 +31,12 @@ claude mcp add --transport stdio \
 Add `-s user` before `ynab` to make it available in every project instead of just the current one.
 Env vars are scoped to the server process. See the [Quick start](/start-here/quick-start/) for
 where to get a token.
+
+## What it looks like
+
+Both captures below are real sessions against [demo mode](/start-here/quick-start/) — a fictional
+budget, no credentials.
+
+![Claude Code's /mcp screen showing the ynab server connected with 46 tools](../../../assets/screenshots/claude-code-mcp.png)
+
+![Claude Code answering "how's my budget looking this month?" by calling the ynab tools twice and summarizing the demo budget: income, category spending, and one overspent category flagged](../../../assets/screenshots/claude-code-result.png)

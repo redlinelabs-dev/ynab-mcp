@@ -39,3 +39,11 @@ YNAB_BUDGET_ID = "last-used"
 ```
 
 Restart the app. See the [Quick start](/start-here/quick-start/) for where to get a token.
+
+## What it looks like
+
+A real Codex app session against [demo mode](/start-here/quick-start/) — a fictional budget, no
+credentials. Tip: naming YNAB in your prompt ("Check my YNAB budget…") is the reliable way to get
+Codex to reach for the tools on the first try.
+
+![The Codex desktop app answering "Check my YNAB budget - how's this month looking?" with a bulleted summary of the demo budget: unassigned money, one overspent category, and transactions needing review](../../../assets/screenshots/codex-app-result.png)

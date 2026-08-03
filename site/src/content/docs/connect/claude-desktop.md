@@ -37,3 +37,12 @@ under `mcpServers`:
 
 Restart Claude Desktop. See the [Quick start](/start-here/quick-start/) for where to get a token,
 and [Trust](/trust/) for what `YNAB_READ_ONLY` changes if you'd rather add it here too.
+
+## What it looks like
+
+Both captures below are real sessions against [demo mode](/start-here/quick-start/) — a fictional
+budget, no credentials.
+
+![Claude Desktop's connector settings for ynab, listing its 46 tools with per-tool permission controls set to ask or always allow](../../../assets/screenshots/claude-desktop-tools.png)
+
+![Claude Desktop answering a budget question by pulling the current month from the ynab server and reporting the demo budget's income, categories, and one overspend](../../../assets/screenshots/claude-desktop-result.png)

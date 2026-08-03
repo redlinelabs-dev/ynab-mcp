@@ -50,3 +50,11 @@ YNAB_BUDGET_ID = "last-used"
 ```
 
 See the [Quick start](/start-here/quick-start/) for where to get a token.
+
+## What it looks like
+
+A real Codex CLI session against [demo mode](/start-here/quick-start/) — a fictional budget, no
+credentials. The raw tool responses are visible, including the milliunit amounts and their
+`*_units` siblings.
+
+![Codex CLI calling ynab.spending_summary and ynab.month_transactions, showing raw JSON responses and a plain-language summary of the demo budget's month](../../../assets/screenshots/codex-cli-result.png)
