@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.1](https://github.com/redlinelabs-dev/ynab-mcp/compare/ynab-mcp-v0.2.0...ynab-mcp-v0.2.1) (2026-08-03)
+
+
+### Features
+
+* **site:** implement substantiated SEO practices from the research playbook ([a75d40e](https://github.com/redlinelabs-dev/ynab-mcp/commit/a75d40eb345b5f28bf18b01046e7d41dbf3ba2b0))
+* **skills:** add /seo project skill wrapping the research playbook ([5705d14](https://github.com/redlinelabs-dev/ynab-mcp/commit/5705d1458726e3e98b2257192794934b91d153b6))
+
+
+### Documentation
+
+* **adr:** amend ADR-0005 — OAuth becomes the preferred connection method ([3d3c70e](https://github.com/redlinelabs-dev/ynab-mcp/commit/3d3c70e5c3511a5aa10b81f99bf2ea20ee9d7aaa))
+* **research:** current substantiated SEO practices (Aug 2025–Aug 2026) ([f86c172](https://github.com/redlinelabs-dev/ynab-mcp/commit/f86c172a367b4e4456b2c982451525d75d797201))
+* **site:** add YNAB's required non-affiliation disclaimer verbatim ([d1fa9e7](https://github.com/redlinelabs-dev/ynab-mcp/commit/d1fa9e7d810c808dae79a42fc96cca4b9c100c7e))
+* **site:** make OAuth the preferred connection method ([292a0fc](https://github.com/redlinelabs-dev/ynab-mcp/commit/292a0fc099f1ba3b631205decd9a70355d86bf6e))
+
 ## [0.2.0](https://github.com/redlinelabs-dev/ynab-mcp/compare/ynab-mcp-v0.1.0...ynab-mcp-v0.2.0) (2026-08-02)
 
 
