@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Full history, not the default shallow clone: astro.config.mjs derives each
           # sitemap entry's <lastmod> from `git log -1` on the page's own source file.
@@ -41,7 +41,7 @@ jobs:
           # publish a sitemap with no dates at all.
           fetch-depth: 0
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
       - name: Install root dependencies

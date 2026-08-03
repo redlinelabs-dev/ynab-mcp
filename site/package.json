@@ -1,19 +1,35 @@
 {
   "name": "ynab-mcp-site",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
     "build": "npm run generate:reference && astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "generate:reference": "node --experimental-strip-types scripts/generate-reference.ts"
+    "generate:reference": "node --experimental-strip-types scripts/generate-reference.ts",
+    "typecheck": "astro check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "astro check && oxlint && oxfmt --check && vitest run",
+    "fix": "oxlint --fix && oxfmt"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
     "@astrojs/starlight": "^0.41.5",
     "astro": "^7.1.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "latest",
+    "oxfmt": "latest",
+    "oxlint": "latest",
+    "typescript": "latest",
+    "vitest": "^4.1.8"
   }
 }
