@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.2](https://github.com/redlinelabs-dev/ynab-mcp/compare/ynab-mcp-v0.2.1...ynab-mcp-v0.2.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **site,ci:** fold in review feedback from merged PRs [#21](https://github.com/redlinelabs-dev/ynab-mcp/issues/21)–[#23](https://github.com/redlinelabs-dev/ynab-mcp/issues/23) ([#27](https://github.com/redlinelabs-dev/ynab-mcp/issues/27)) ([7210b2a](https://github.com/redlinelabs-dev/ynab-mcp/commit/7210b2afe331a4b0421cc3d6b879214a63d3f464))
+
+
+### Documentation
+
+* **site:** crop account names out of the harness screenshots ([#26](https://github.com/redlinelabs-dev/ynab-mcp/issues/26)) ([35841a0](https://github.com/redlinelabs-dev/ynab-mcp/commit/35841a09e4008232a6380c25a3debfd03345672b))
+* **site:** real screenshots of four harnesses running demo mode ([#17](https://github.com/redlinelabs-dev/ynab-mcp/issues/17)) ([#24](https://github.com/redlinelabs-dev/ynab-mcp/issues/24)) ([0edd512](https://github.com/redlinelabs-dev/ynab-mcp/commit/0edd512b7cb5aeb1c60b68f8ad714367f0ac9f68))
+
 ## [0.2.1](https://github.com/redlinelabs-dev/ynab-mcp/compare/ynab-mcp-v0.2.0...ynab-mcp-v0.2.1) (2026-08-03)
 
 
