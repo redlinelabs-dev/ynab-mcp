@@ -33,6 +33,9 @@ session, no mock-ups, no edited chrome (rectangular cropping only). Files live i
    must show the fictional Demo Budget — ~$5,300 income, an overspent Hobbies category with a
    $219.99 "Model kit", "Nimbus Analytics Payroll" paychecks. Anything else = real data, discard.
 3. Sweep the frame: window titles, scrollback, sidebars — no tokens, no real amounts, no
-   addresses. Crop rather than blur; blurring reads as edited chrome.
+   addresses. Crop rather than blur; blurring reads as edited chrome. The shipped set crops out
+   app sidebars, tab strips, and banners entirely, because that's where harnesses put account
+   names and usernames — do the same on retakes (sharp `extract`; see git history for the
+   originals' crop boxes).
 4. PNG, roughly 1200–1300 px wide, into `site/src/assets/screenshots/`, embedded with alt text
    that describes what the reader is looking at.
