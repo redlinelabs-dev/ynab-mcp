@@ -125,4 +125,17 @@ describe("buildMcpHttpHandler", () => {
       expect(names).not.toContain("delete_transaction");
     }
   });
+
+  it("refuses a hidden write tool called directly on both eras", async () => {
+    for (const mode of ["legacy", { pin: "2026-07-28" }] satisfies VersionNegotiationMode[]) {
+      const client = await connect(mode, ctx({ readOnly: true }));
+
+      const result = await client.callTool({
+        name: "delete_transaction",
+        arguments: { transaction_id: "t1" },
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toMatch(/not enabled/);
+    }
+  });
 });

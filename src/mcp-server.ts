@@ -98,10 +98,13 @@ export interface McpHttpHandler {
 // built-in 2025-era fallback always streams, so legacy traffic is routed to our
 // own stateless JSON transport instead.
 export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
-  const modern = createMcpHandler(() => buildMcpServer(ctx), {
-    legacy: "reject",
-    responseMode: "json",
-  });
+  // Built on first 2026-era request only: most traffic today is 2025-era.
+  let modern: ReturnType<typeof createMcpHandler> | undefined;
+  const getModern = () =>
+    (modern ??= createMcpHandler(() => buildMcpServer(ctx), {
+      legacy: "reject",
+      responseMode: "json",
+    }));
 
   async function legacy(request: Request, options?: FetchOptions): Promise<Response> {
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -122,7 +125,9 @@ export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
     fetch: async (request, options) =>
       (await isLegacyRequest(request, options?.parsedBody))
         ? legacy(request, options)
-        : modern.fetch(request, options),
-    close: () => modern.close(),
+        : getModern().fetch(request, options),
+    close: async () => {
+      await modern?.close();
+    },
   };
 }
