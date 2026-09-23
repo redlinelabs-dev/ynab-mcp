@@ -103,6 +103,43 @@ describe("buildMcpHttpHandler", () => {
     expect(settled).toBe("settled");
   });
 
+  it("settles a 2026-era request when the client disconnects mid-call", async () => {
+    const hangingYnab: typeof fetch = () => new Promise<Response>(() => {});
+    const handler = buildMcpHttpHandler(ctx({ client: new YnabClient("tok", hangingYnab) }));
+    const disconnect = new AbortController();
+    const call = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "list_budgets",
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
+    };
+    const headers = {
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": "tools/call",
+      "mcp-name": "list_budgets",
+    };
+
+    const pending = handler.fetch(new Request(post(call, headers), { signal: disconnect.signal }), {
+      parsedBody: call,
+    });
+    setTimeout(() => disconnect.abort(), 20);
+
+    const settled = await Promise.race([
+      pending.then(
+        () => "settled",
+        () => "settled",
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("hung"), 1000)),
+    ]);
+    expect(settled).toBe("settled");
+  });
+
   it("marks read tools read-only and deletes destructive", async () => {
     const client = await connect("legacy");
 
