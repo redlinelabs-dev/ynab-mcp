@@ -28,7 +28,10 @@ const ToolInputSchema = z.object({
   properties: z.record(z.string(), z.json()).optional(),
   required: z.array(z.string()).optional(),
 });
-const INPUT_SCHEMAS = new Map(TOOLS.map((t) => [t.name, ToolInputSchema.parse(t.inputSchema)]));
+const LISTED_TOOLS = TOOLS.map((t) => ({
+  def: t,
+  inputSchema: ToolInputSchema.parse(t.inputSchema),
+}));
 
 // Tools that only add records (never overwrite or remove existing ones).
 const ADDITIVE = /^(create_|bulk_create_|import_)/;
@@ -55,13 +58,13 @@ export function buildMcpServer(ctx: ToolContext): Server {
   server.setRequestHandler(
     "tools/list",
     async (): Promise<ListToolsResult> => ({
-      tools: TOOLS.filter((t) =>
+      tools: LISTED_TOOLS.filter(({ def: t }) =>
         isToolEnabled(ctx.enabledGroups, ctx.readOnly, t.group, t.write),
-      ).map((t) => ({
+      ).map(({ def: t, inputSchema }) => ({
         name: t.name,
         title: toolTitle(t.name),
         description: t.description,
-        inputSchema: INPUT_SCHEMAS.get(t.name) ?? { type: "object" },
+        inputSchema,
         annotations: toolAnnotations(t),
       })),
     }),
@@ -98,7 +101,8 @@ export interface McpHttpHandler {
 // built-in 2025-era fallback always streams, so legacy traffic is routed to our
 // own stateless JSON transport instead.
 export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
-  // Built on first 2026-era request only: most traffic today is 2025-era.
+  // Built only if this handler sees a 2026-era request. server.ts makes one handler
+  // per HTTP request, so this just skips construction for 2025-era requests.
   let modern: ReturnType<typeof createMcpHandler> | undefined;
   const getModern = () =>
     (modern ??= createMcpHandler(() => buildMcpServer(ctx), {
