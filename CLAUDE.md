@@ -11,7 +11,9 @@ bulk-update, delete, find-duplicates, import, spending analysis), months, payees
 transactions.
 Tools are grouped into **toolsets** (`budgets`, `accounts`, `categories`, `transactions`, `months`,
 `payees`, `scheduled`, `money_movements`) that operators enable/disable via env to keep the model's context lean. It
-talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio via `@modelcontextprotocol/sdk`.
+talks to the YNAB REST API (`https://api.ynab.com/v1`) over stdio or Streamable HTTP via the MCP SDK v2
+(`@modelcontextprotocol/server`), serving both MCP protocol eras — the 2025-era `initialize`
+handshake and `2026-07-28` — from one endpoint (ADR-0006).
 
 > **Bank linking is impossible via the YNAB API** (app-only); `create_account` makes manual
 > accounts, `import_transactions` only refreshes already-linked ones. Rate limit: **200 req/hr** —

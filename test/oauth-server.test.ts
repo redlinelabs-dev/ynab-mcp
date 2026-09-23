@@ -1,4 +1,4 @@
-import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
+import type { OAuthClientInformationFull } from "@modelcontextprotocol/server";
 
 import { beforeEach, describe, expect, it } from "vitest";
 

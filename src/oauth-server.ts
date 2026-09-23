@@ -1,28 +1,24 @@
+import type {
+  AuthInfo,
+  OAuthClientInformationFull,
+  OAuthTokenRevocationRequest,
+  OAuthTokens,
+} from "@modelcontextprotocol/server";
+import type {
+  OAuthRegisteredClientsStore,
+  AuthorizationParams,
+  OAuthServerProvider,
+} from "@modelcontextprotocol/server-legacy/auth";
 // The OAuth 2.1 authorization server we present to MCP clients, implemented
 // against the MCP SDK's OAuthServerProvider interface. We are the AS to the MCP
 // client (issue our own codes + tokens); the authorize() step proxies the user's
 // browser to YNAB (the upstream IdP) and the /callback completes by minting our
 // code. YNAB tokens live in the grant, sealed at rest. The SDK's router validates
 // the MCP client's PKCE for us (skipLocalPkceValidation stays false).
-
-import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
-import type {
-  AuthorizationParams,
-  OAuthServerProvider,
-} from "@modelcontextprotocol/sdk/server/auth/provider.js";
-import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import type {
-  OAuthClientInformationFull,
-  OAuthTokenRevocationRequest,
-  OAuthTokens,
-} from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Response } from "express";
 
-import {
-  InvalidGrantError,
-  InvalidTokenError,
-} from "@modelcontextprotocol/sdk/server/auth/errors.js";
-import { OAuthClientInformationFullSchema } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { OAuthClientInformationFullSchema } from "@modelcontextprotocol/core";
+import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/server-legacy/auth";
 
 import type { FetchFn } from "./client.js";
 import type { OAuthConfig } from "./oauth-config.js";

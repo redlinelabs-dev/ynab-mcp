@@ -5,12 +5,15 @@
 // in the tsgo-checked, unit-tested core modules; this file is the thin bootstrap.
 
 import "dotenv/config";
-import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+// OAuth AS + RS helpers stay on the SDK's frozen v1 copy: v2 dropped the
+// authorization-server side, and keeping both halves on one copy keeps the
+// provider's error classes consistent (401s stay 401s) and every issued token valid.
 import {
   getOAuthProtectedResourceMetadataUrl,
   mcpAuthRouter,
-} from "@modelcontextprotocol/sdk/server/auth/router.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+  requireBearerAuth,
+} from "@modelcontextprotocol/server-legacy/auth";
 import express from "express";
 import { z } from "zod";
 
@@ -21,7 +24,7 @@ import type { OAuthProps } from "./worker-config.js";
 import { YnabClient } from "./client.js";
 import { importKey, seal, unseal } from "./encryption.js";
 import { requireEnv } from "./env.js";
-import { buildMcpServer } from "./mcp-server.js";
+import { buildMcpHttpHandler } from "./mcp-server.js";
 import { YNAB_AUTHORIZE_ENDPOINT, YNAB_TOKEN_ENDPOINT } from "./oauth-config.js";
 import { YnabOAuthProvider } from "./oauth-server.js";
 import { Store } from "./store.js";
@@ -175,7 +178,8 @@ async function main(): Promise<void> {
         );
       };
 
-  // The authenticated MCP endpoint (stateless Streamable HTTP, one transport per request).
+  // The authenticated MCP endpoint: stateless, one handler per request, serving both
+  // the 2025-era handshake and the 2026-07-28 per-request envelope.
   app.all("/mcp", mcpAuth, express.json(), (req, res) => {
     handleMcp({ provider, store, encKey, config, patReadOnly }, req, res).catch((err: unknown) => {
       if (!res.headersSent) res.status(500).json({ error: errorText(err) });
@@ -246,21 +250,12 @@ async function handleMcp(
   const resolved = await resolveContext(deps, req, res);
   if (!resolved) return;
 
-  // enableJsonResponse: reply with a single JSON body instead of an SSE stream —
-  // SSE gets buffered by reverse proxies (e.g. Tailscale `serve`), which makes
-  // tool calls hang until the client times out.
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  console.error(`[mcp] context ready (${resolved.note}) → transport`);
-  const server = buildMcpServer(resolved.ctx);
+  console.error(`[mcp] context ready (${resolved.note}) → handler`);
+  const handler = buildMcpHttpHandler(resolved.ctx);
   res.on("close", () => {
-    void transport.close();
-    void server.close();
+    void handler.close();
   });
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  await toNodeHandler(handler)(req, res, req.body);
 }
 
 function errorText(err: unknown): string {

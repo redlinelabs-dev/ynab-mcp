@@ -1,26 +1,73 @@
 // The MCP Server wiring, shared by every transport (stdio in index.ts, HTTP in
-// server.ts). Given a ToolContext, registers the ListTools/CallTool handlers —
-// toolset/read-only gating on list, Zod-aware error wrapping on call.
+// server.ts). Given a ToolContext, registers the tools/list + tools/call handlers —
+// toolset/read-only gating on list, Zod-aware error wrapping on call — and wraps
+// it in an HTTP handler that serves both protocol eras (2025-era handshake and
+// the 2026-07-28 per-request envelope) from one endpoint.
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { ListToolsResult, ToolAnnotations } from "@modelcontextprotocol/server";
+
+import {
+  createMcpHandler,
+  isLegacyRequest,
+  Server,
+  WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import type { ToolContext } from "./tools.js";
+import type { ToolContext, ToolDef } from "./tools.js";
 
 import { handleTool, TOOLS } from "./tools.js";
 import { isToolEnabled } from "./toolsets.js";
 
+const SERVER_INFO = { name: "ynab", version: "0.2.2" }; // x-release-please-version
+
+// Tool input schemas are authored as plain (partly readonly) literals in tools.ts;
+// parsing them once into the SDK's JSON-value shape avoids a type assertion.
+const ToolInputSchema = z.object({
+  type: z.literal("object"),
+  properties: z.record(z.string(), z.json()).optional(),
+  required: z.array(z.string()).optional(),
+});
+const INPUT_SCHEMAS = new Map(TOOLS.map((t) => [t.name, ToolInputSchema.parse(t.inputSchema)]));
+
+// Tools that only add records (never overwrite or remove existing ones).
+const ADDITIVE = /^(create_|bulk_create_|import_)/;
+
+export function toolAnnotations(t: ToolDef): ToolAnnotations {
+  return {
+    readOnlyHint: !t.write,
+    ...(t.write ? { destructiveHint: !ADDITIVE.test(t.name) } : {}),
+    openWorldHint: true,
+  };
+}
+
+// "list_budgets" → "List Budgets"
+export function toolTitle(name: string): string {
+  return name
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function buildMcpServer(ctx: ToolContext): Server {
-  const server = new Server({ name: "ynab", version: "0.1.0" }, { capabilities: { tools: {} } });
+  const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOLS.filter((t) =>
-      isToolEnabled(ctx.enabledGroups, ctx.readOnly, t.group, t.write),
-    ).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
-  }));
+  server.setRequestHandler(
+    "tools/list",
+    async (): Promise<ListToolsResult> => ({
+      tools: TOOLS.filter((t) =>
+        isToolEnabled(ctx.enabledGroups, ctx.readOnly, t.group, t.write),
+      ).map((t) => ({
+        name: t.name,
+        title: toolTitle(t.name),
+        description: t.description,
+        inputSchema: INPUT_SCHEMAS.get(t.name) ?? { type: "object" },
+        annotations: toolAnnotations(t),
+      })),
+    }),
+  );
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler("tools/call", async (request) => {
     try {
       const text = await handleTool(ctx, request.params.name, request.params.arguments ?? {});
       return { content: [{ type: "text" as const, text }] };
@@ -36,4 +83,46 @@ export function buildMcpServer(ctx: ToolContext): Server {
   });
 
   return server;
+}
+
+type FetchOptions = Parameters<ReturnType<typeof createMcpHandler>["fetch"]>[1];
+
+export interface McpHttpHandler {
+  fetch: (request: Request, options?: FetchOptions) => Promise<Response>;
+  close: () => Promise<void>;
+}
+
+// One web-standard handler for both protocol eras. Every response is a single
+// JSON body, never SSE: SSE gets buffered by reverse proxies (e.g. Tailscale
+// `serve`), which makes tool calls hang until the client times out. The SDK's
+// built-in 2025-era fallback always streams, so legacy traffic is routed to our
+// own stateless JSON transport instead.
+export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
+  const modern = createMcpHandler(() => buildMcpServer(ctx), {
+    legacy: "reject",
+    responseMode: "json",
+  });
+
+  async function legacy(request: Request, options?: FetchOptions): Promise<Response> {
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    const server = buildMcpServer(ctx);
+    await server.connect(transport);
+    try {
+      return await transport.handleRequest(request, options);
+    } finally {
+      void transport.close();
+      void server.close();
+    }
+  }
+
+  return {
+    fetch: async (request, options) =>
+      (await isLegacyRequest(request, options?.parsedBody))
+        ? legacy(request, options)
+        : modern.fetch(request, options),
+    close: () => modern.close(),
+  };
 }
