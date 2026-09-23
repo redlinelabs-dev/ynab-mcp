@@ -59,7 +59,7 @@ in with their own YNAB account and gets their own isolated, read-only-by-default
 - **OAuth server to MCP clients** — the MCP SDK's Express `mcpAuthRouter` (`/authorize`, `/token`,
   `/register`, `/revoke`, `.well-known` metadata) + a custom `OAuthServerProvider`
   (`src/oauth-server.ts`): DCR, PKCE validation, our own code/token issuance. `requireBearerAuth`
-  guards `/mcp` (stateless `StreamableHTTPServerTransport`, one per request).
+  guards `/mcp` (stateless, one handler per request, serving both protocol eras — ADR-0006).
 - **Persistence** — `src/store.ts` over built-in `node:sqlite` (single file on a volume): clients,
   in-flight authorize/login state, issued codes/tokens (by SHA-256 hash), and per-tenant grants.
 - **Encryption at rest** — `src/encryption.ts` AES-256-GCM seals the YNAB tokens in each grant

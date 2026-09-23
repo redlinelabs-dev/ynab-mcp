@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { buildMcpServer } from "./mcp-server.js";
 import { buildStdioContext } from "./stdio-config.js";
@@ -27,15 +27,12 @@ if (enabledToolNames(ctx).size === 0) {
 
 // --- Server bootstrap ---
 
-const server = buildMcpServer(ctx);
-
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("YNAB MCP server running on stdio");
-}
-
-main().catch((err: unknown) => {
-  console.error("Fatal:", err);
-  process.exit(1);
+// The opening exchange picks the era (2025-era handshake or 2026-07-28) and pins
+// one server instance from the factory for the connection's lifetime. serveStdio
+// is synchronous and returns a { close } handle, not a promise: it catches its own
+// transport start (which can only fail if already started) and reports through
+// onerror, so there is no rejection to catch here. Stdin EOF ends the process.
+serveStdio(() => buildMcpServer(ctx), {
+  onerror: (err) => console.error("[ynab-mcp]", err),
 });
+console.error("YNAB MCP server running on stdio");

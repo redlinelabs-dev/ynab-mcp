@@ -12,6 +12,6 @@
     { "type": "chore", "section": "Miscellaneous" }
   ],
   "packages": {
-    ".": {}
+    ".": { "extra-files": ["src/mcp-server.ts"] }
   }
 }
