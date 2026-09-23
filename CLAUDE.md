@@ -92,6 +92,9 @@ name, args)` dispatch. Parses args with Zod input schemas, calls the client, fol
    `src/tools.ts`). Each `TOOLS` entry's `group`/`write` tags drive toolset gating.
 3. Usually a **`formatX`** in `src/format.ts` for compact output.
 4. New domain = a new `ToolGroup` literal in `src/toolsets.ts` (`ALL_GROUPS` + the union).
+5. Name it by what it does: a write tool that only adds records must be `create_*`, `bulk_create_*`
+   or `import_*`. `toolAnnotations` (`src/mcp-server.ts`) marks every other write tool
+   `destructiveHint: true`.
 
 ## Testing
 
