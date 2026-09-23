@@ -109,8 +109,8 @@ export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
       enableJsonResponse: true,
     });
     const server = buildMcpServer(ctx);
-    await server.connect(transport);
     try {
+      await server.connect(transport);
       return await transport.handleRequest(request, options);
     } finally {
       void transport.close();
