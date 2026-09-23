@@ -35,10 +35,11 @@ describe("sourceFileFor", () => {
 });
 
 describe("gitLastModified", () => {
+  // git's %cI renders a UTC committer as "Z", any other zone as "±hh:mm".
   it("returns an ISO date for a tracked file", () => {
     const file = join(SITE_ROOT, "astro.config.mjs");
     const iso = gitLastModified(file, SITE_ROOT);
-    expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+    expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/);
   });
 
   it("returns undefined for a file with no git history", () => {
