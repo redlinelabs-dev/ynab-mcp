@@ -28,7 +28,10 @@ if (enabledToolNames(ctx).size === 0) {
 // --- Server bootstrap ---
 
 // The opening exchange picks the era (2025-era handshake or 2026-07-28) and pins
-// one server instance from the factory for the connection's lifetime.
+// one server instance from the factory for the connection's lifetime. serveStdio
+// is synchronous and returns a { close } handle, not a promise: it catches its own
+// transport start (which can only fail if already started) and reports through
+// onerror, so there is no rejection to catch here. Stdin EOF ends the process.
 serveStdio(() => buildMcpServer(ctx), {
   onerror: (err) => console.error("[ynab-mcp]", err),
 });

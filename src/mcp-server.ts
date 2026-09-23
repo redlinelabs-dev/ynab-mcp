@@ -112,9 +112,19 @@ export function buildMcpHttpHandler(ctx: ToolContext): McpHttpHandler {
       enableJsonResponse: true,
     });
     const server = buildMcpServer(ctx);
+    // A client disconnect aborts request.signal (toNodeHandler). Settle then —
+    // nobody is left to read the reply — instead of holding the transport open
+    // until the in-flight YNAB call returns.
+    const disconnected = new Promise<Response>((resolve) => {
+      const gone = () => resolve(new Response(null, { status: 499 }));
+      if (request.signal.aborted) gone();
+      else request.signal.addEventListener("abort", gone, { once: true });
+    });
     try {
       await server.connect(transport);
-      return await transport.handleRequest(request, options);
+      const reply = transport.handleRequest(request, options);
+      reply.catch(() => {}); // may settle after a disconnect already won the race
+      return await Promise.race([reply, disconnected]);
     } finally {
       void transport.close();
       void server.close();

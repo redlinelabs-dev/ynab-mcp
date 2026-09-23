@@ -80,6 +80,29 @@ describe("buildMcpHttpHandler", () => {
     expect(res.headers.get("content-type")).toMatch(/^application\/json/);
   });
 
+  // toNodeHandler aborts request.signal when the client disconnects; a 2025-era
+  // exchange must release its transport then, not when the upstream call returns.
+  it("settles a 2025-era request when the client disconnects mid-call", async () => {
+    const hangingYnab: typeof fetch = () => new Promise<Response>(() => {});
+    const handler = buildMcpHttpHandler(ctx({ client: new YnabClient("tok", hangingYnab) }));
+    const disconnect = new AbortController();
+    const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_budgets" } };
+
+    const pending = handler.fetch(new Request(post(call), { signal: disconnect.signal }), {
+      parsedBody: call,
+    });
+    setTimeout(() => disconnect.abort(), 20);
+
+    const settled = await Promise.race([
+      pending.then(
+        () => "settled",
+        () => "settled",
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("hung"), 1000)),
+    ]);
+    expect(settled).toBe("settled");
+  });
+
   it("marks read tools read-only and deletes destructive", async () => {
     const client = await connect("legacy");
 
