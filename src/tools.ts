@@ -29,6 +29,7 @@ import {
   formatScheduledTransaction,
   formatTransaction,
 } from "./format.js";
+import { readReconciliationPlan, applyReconciliation } from "./reconciliation.js";
 import { summarizeSpending } from "./summary.js";
 import { isToolEnabled } from "./toolsets.js";
 
@@ -37,6 +38,11 @@ export interface ToolContext {
   enabledGroups: Set<ToolGroup>;
   readOnly: boolean;
   defaultBudget: string;
+  writePolicy?: "clear-status";
+  clearedWriteBudget?: string;
+  categoryWriteBudget?: string;
+  approvalWriteBudget?: string;
+  reconciliationWriteBudget?: string;
 }
 
 // The YNAB API operation(s) a tool actually calls, for the generated reference's
@@ -58,7 +64,12 @@ export interface ToolDef {
   group: ToolGroup;
   write: boolean;
   description: string;
-  inputSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] };
+  inputSchema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+    additionalProperties?: boolean;
+  };
   endpoints: Endpoint[];
 }
 
@@ -81,8 +92,52 @@ const TransactionRef = BudgetArg.extend({ transaction_id: z.string() });
 const MonthRef = BudgetArg.extend({ month: z.string().default("current") });
 const PayeeRef = BudgetArg.extend({ payee_id: z.string() });
 
+const AccountReconciliationInput = z
+  .object({
+    budget_id: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/)
+      .optional(),
+    account_id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    bank_balance_milliunits: z.number().int().safe(),
+  })
+  .strict();
+const ApplyAccountReconciliationInput = AccountReconciliationInput.extend({
+  plan_id: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+const ApproveTransactionInput = z
+  .object({
+    budget_id: z.string().optional(),
+    transaction_id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    expected_category_id: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/)
+      .nullable(),
+  })
+  .strict();
+
+const SetTransactionCategoryInput = z
+  .object({
+    budget_id: z.string().optional(),
+    transaction_id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    category_id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    expected_category_id: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/)
+      .nullable(),
+  })
+  .strict();
+
 const flagColor = z.enum(["red", "orange", "yellow", "green", "blue", "purple"]);
 const cleared = z.enum(["cleared", "uncleared", "reconciled"]);
+const SetTransactionClearedInput = z
+  .object({
+    budget_id: z.string().optional(),
+    transaction_id: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    cleared: z.enum(["cleared", "uncleared"]),
+  })
+  .strict();
 
 const ListTransactionsInput = BudgetArg.extend({
   account_id: z.string().optional(),
@@ -307,6 +362,187 @@ const subtransactionProps = {
 } as const;
 
 export const TOOLS: ToolDef[] = [
+  {
+    name: "set_transaction_cleared",
+    group: "transactions",
+    write: true,
+    description:
+      "Set only the cleared or uncleared status of an existing transaction in the approved budget. Cannot change reconciled transactions, amounts, dates, categories, payees, or delete anything.",
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "getTransactionById",
+      ),
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "updateTransaction",
+      ),
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string" },
+        transaction_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        cleared: { type: "string", enum: ["cleared", "uncleared"] },
+      },
+      required: ["transaction_id", "cleared"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_transaction_category",
+    group: "transactions",
+    write: true,
+    description:
+      "Set only the category of an existing ordinary transaction in the approved budget. Requires the expected current category (null for uncategorized). Rejects transfers, splits, deleted or reconciled entries, and inactive/internal categories. Cannot change amounts, dates, payees, cleared status, or delete anything.",
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "getTransactionById",
+      ),
+      ep("GET", "/budgets/{budget_id}/categories/{category_id}", "Categories", "getCategoryById"),
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "updateTransaction",
+      ),
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string" },
+        transaction_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        category_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        expected_category_id: {
+          type: ["string", "null"],
+          pattern: "^[a-zA-Z0-9_-]+$",
+          description:
+            "Current category id from a fresh read; null for an uncategorized transaction.",
+        },
+      },
+      required: ["transaction_id", "category_id", "expected_category_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "approve_transaction",
+    group: "transactions",
+    write: true,
+    description:
+      "Accept an existing ordinary transaction by setting only approved to true in the approved budget. Requires the reviewed current category (null if uncategorized). Cannot unapprove, clear, recategorize, change financial fields, or delete. Rejects deleted/reconciled entries, transfers, and splits.",
+    endpoints: [
+      ep(
+        "GET",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "getTransactionById",
+      ),
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "updateTransaction",
+      ),
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string" },
+        transaction_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        expected_category_id: {
+          type: ["string", "null"],
+          pattern: "^[a-zA-Z0-9_-]+$",
+          description:
+            "Current category id from review; null for uncategorized. Stops if the category changed.",
+        },
+      },
+      required: ["transaction_id", "expected_category_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "preview_account_reconciliation",
+    group: "transactions",
+    write: false,
+    description:
+      "Read-only account reconciliation preview. Requires the signed bank posted balance in integer milliunits (card debt negative). Reads full history, validates totals, lists cleared entries to mark reconciled, and reports blockers. Does not verify bank posting or change data.",
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/accounts/{account_id}", "Accounts", "getAccountById"),
+      ep(
+        "GET",
+        "/budgets/{budget_id}/accounts/{account_id}/transactions",
+        "Transactions",
+        "getTransactionsByAccount",
+      ),
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        account_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        bank_balance_milliunits: {
+          type: "integer",
+          description:
+            "Signed posted bank balance in milliunits; 1000 is one unit. Credit-card debt must be negative. Exclude pending activity.",
+        },
+      },
+      required: ["account_id", "bank_balance_milliunits"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "reconcile_account",
+    group: "transactions",
+    write: true,
+    description:
+      "Apply an explicitly approved account reconciliation preview using its plan_id. Only already-cleared, approved transactions become reconciled; uncleared entries are never cleared. Requires a matching bank balance, unchanged preview, and an opted-in budget. Maximum 25 entries. Reports partial failures and independently verifies results. The API has no account-level reconciliation endpoint; account reconciliation-date behavior is reported separately.",
+    endpoints: [
+      ep("GET", "/budgets/{budget_id}/accounts/{account_id}", "Accounts", "getAccountById"),
+      ep(
+        "GET",
+        "/budgets/{budget_id}/accounts/{account_id}/transactions",
+        "Transactions",
+        "getTransactionsByAccount",
+      ),
+      ep(
+        "GET",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "getTransactionById",
+      ),
+      ep(
+        "PUT",
+        "/budgets/{budget_id}/transactions/{transaction_id}",
+        "Transactions",
+        "updateTransaction",
+      ),
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        account_id: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        bank_balance_milliunits: {
+          type: "integer",
+          description: "Same signed posted bank balance in milliunits as the approved preview.",
+        },
+        plan_id: {
+          type: "string",
+          pattern: "^[a-f0-9]{64}$",
+          description: "plan_id from the reviewed read-only preview.",
+        },
+      },
+      required: ["account_id", "bank_balance_milliunits", "plan_id"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "list_budgets",
     group: "budgets",
@@ -1209,11 +1445,19 @@ export const TOOLS: ToolDef[] = [
 // ---------------------------------------------------------------------------
 
 export function enabledToolNames(ctx: ToolContext): Set<string> {
-  return new Set(
-    TOOLS.filter((t) => isToolEnabled(ctx.enabledGroups, ctx.readOnly, t.group, t.write)).map(
-      (t) => t.name,
-    ),
-  );
+  return new Set(TOOLS.filter((t) => isToolEnabledForContext(ctx, t)).map((t) => t.name));
+}
+
+export function isToolEnabledForContext(ctx: ToolContext, tool: ToolDef): boolean {
+  if (!isToolEnabled(ctx.enabledGroups, ctx.readOnly, tool.group, tool.write)) return false;
+  if (tool.name === "set_transaction_cleared") return ctx.writePolicy === "clear-status";
+  if (tool.name === "set_transaction_category")
+    return ctx.writePolicy === "clear-status" && !!ctx.categoryWriteBudget;
+  if (tool.name === "approve_transaction")
+    return ctx.writePolicy === "clear-status" && !!ctx.approvalWriteBudget;
+  if (tool.name === "reconcile_account")
+    return ctx.writePolicy === "clear-status" && !!ctx.reconciliationWriteBudget;
+  return !(ctx.writePolicy === "clear-status" && tool.write);
 }
 
 function json(value: unknown): string {
@@ -1245,6 +1489,120 @@ export async function handleTool(
     (args.budget_id ?? "").trim() || ctx.defaultBudget;
 
   switch (name) {
+    case "set_transaction_cleared": {
+      const args = SetTransactionClearedInput.parse(rawArgs);
+      if (!ctx.clearedWriteBudget)
+        throw new Error("No budget approved for cleared-status changes.");
+      if (args.budget_id && args.budget_id !== ctx.clearedWriteBudget) {
+        throw new Error("Cleared-status changes are not enabled for this budget.");
+      }
+      const targetBudget = ctx.clearedWriteBudget;
+      const current = await client.getTransaction(targetBudget, args.transaction_id);
+      if (current.deleted || current.cleared === "reconciled") {
+        throw new Error("Deleted or reconciled transactions cannot be changed by this tool.");
+      }
+      if (current.cleared === args.cleared) return json(formatTransaction(current));
+      return json(
+        formatTransaction(
+          await client.updateTransaction(targetBudget, args.transaction_id, {
+            cleared: args.cleared,
+          }),
+        ),
+      );
+    }
+    case "set_transaction_category": {
+      const args = SetTransactionCategoryInput.parse(rawArgs);
+      const targetBudget = ctx.categoryWriteBudget;
+      if (!targetBudget || (args.budget_id && args.budget_id !== targetBudget)) {
+        throw new Error("Category changes are not enabled for this budget.");
+      }
+      const current = await client.getTransaction(targetBudget, args.transaction_id);
+      if (
+        current.id !== args.transaction_id ||
+        current.deleted ||
+        current.cleared === "reconciled"
+      ) {
+        throw new Error(
+          "Deleted, reconciled, or mismatched transactions cannot be changed by this tool.",
+        );
+      }
+      if (
+        current.transfer_account_id ||
+        current.transfer_transaction_id ||
+        current.subtransactions.length
+      ) {
+        throw new Error("Transfers and split transactions cannot be changed by this tool.");
+      }
+      if (current.category_id !== args.expected_category_id) {
+        throw new Error(
+          "Transaction category changed since review. Fetch it again before retrying.",
+        );
+      }
+      const category = await client.getCategory(targetBudget, args.category_id);
+      if (
+        category.id !== args.category_id ||
+        category.deleted ||
+        category.hidden ||
+        category.internal === true ||
+        category.category_group_name === "Internal Master Category"
+      ) {
+        throw new Error("Target category must be an active ordinary category.");
+      }
+      if (current.category_id === args.category_id) return json(formatTransaction(current));
+      return json(
+        formatTransaction(
+          await client.updateTransaction(targetBudget, args.transaction_id, {
+            category_id: args.category_id,
+          }),
+        ),
+      );
+    }
+    case "approve_transaction": {
+      const args = ApproveTransactionInput.parse(rawArgs);
+      const targetBudget = ctx.approvalWriteBudget;
+      if (!targetBudget || (args.budget_id && args.budget_id !== targetBudget)) {
+        throw new Error("Transaction approval is not enabled for this budget.");
+      }
+      const current = await client.getTransaction(targetBudget, args.transaction_id);
+      if (
+        current.id !== args.transaction_id ||
+        current.deleted ||
+        current.cleared === "reconciled"
+      ) {
+        throw new Error(
+          "Deleted, reconciled, or mismatched transactions cannot be approved by this tool.",
+        );
+      }
+      if (
+        current.transfer_account_id ||
+        current.transfer_transaction_id ||
+        current.subtransactions.length
+      ) {
+        throw new Error("Transfers and split transactions cannot be approved by this tool.");
+      }
+      if (current.category_id !== args.expected_category_id) {
+        throw new Error(
+          "Transaction category changed since review. Fetch it again before approving.",
+        );
+      }
+      if (current.approved) return json(formatTransaction(current));
+      return json(
+        formatTransaction(
+          await client.updateTransaction(targetBudget, args.transaction_id, { approved: true }),
+        ),
+      );
+    }
+    case "preview_account_reconciliation": {
+      const args = AccountReconciliationInput.parse(rawArgs);
+      return json((await readReconciliationPlan(client, budget(args), args)).preview);
+    }
+    case "reconcile_account": {
+      const args = ApplyAccountReconciliationInput.parse(rawArgs);
+      const targetBudget = ctx.reconciliationWriteBudget;
+      if (!targetBudget || (args.budget_id && args.budget_id !== targetBudget))
+        throw new Error("Reconciliation is not enabled for this budget.");
+      return json(await applyReconciliation(client, targetBudget, args, args.plan_id));
+    }
     case "list_budgets": {
       const args = ListBudgetsInput.parse(rawArgs);
       const budgets = await client.listBudgets({

@@ -27,6 +27,7 @@ import { YnabOAuthProvider } from "./oauth-server.js";
 import { Store } from "./store.js";
 import { parseReadOnly, parseToolsets } from "./toolsets.js";
 import { makeToolContextFromProps } from "./worker-config.js";
+import { parseWritePolicy } from "./write-policy.js";
 
 const ConsentForm = z.object({ pending: z.string(), scope: z.string().optional() });
 const CallbackQuery = z.object({ state: z.string().optional(), code: z.string().optional() });
@@ -63,6 +64,13 @@ async function main(): Promise<void> {
   // OAuth flow). Off by default; the OAuth path is unaffected either way.
   const allowPat = /^(true|1)$/i.test((process.env["YNAB_PAT_PASSTHROUGH"] ?? "").trim());
   const patReadOnly = parseReadOnly(process.env["YNAB_READ_ONLY"]);
+  const {
+    clearStatusOnly,
+    clearedWriteBudget,
+    categoryWriteBudget,
+    approvalWriteBudget,
+    reconciliationWriteBudget,
+  } = parseWritePolicy(process.env);
 
   const store = new Store(databasePath);
   const provider = new YnabOAuthProvider({
@@ -110,7 +118,7 @@ async function main(): Promise<void> {
       issuerUrl,
       resourceServerUrl,
       resourceName: "YNAB MCP",
-      scopesSupported: ["ynab.read", "ynab.write"],
+      scopesSupported: patReadOnly ? ["ynab.read"] : ["ynab.read", "ynab.write"],
     }),
   );
 
@@ -126,7 +134,10 @@ async function main(): Promise<void> {
       return;
     }
     provider
-      .beginUpstreamLogin(form.data.pending, form.data.scope ?? "read-only")
+      .beginUpstreamLogin(
+        form.data.pending,
+        patReadOnly ? "read-only" : (form.data.scope ?? "read-only"),
+      )
       .then((location) => res.redirect(302, location))
       .catch((err: unknown) => res.status(500).send(errorText(err)));
   });
@@ -177,7 +188,22 @@ async function main(): Promise<void> {
 
   // The authenticated MCP endpoint (stateless Streamable HTTP, one transport per request).
   app.all("/mcp", mcpAuth, express.json(), (req, res) => {
-    handleMcp({ provider, store, encKey, config, patReadOnly }, req, res).catch((err: unknown) => {
+    handleMcp(
+      {
+        provider,
+        store,
+        encKey,
+        config,
+        patReadOnly,
+        clearStatusOnly,
+        clearedWriteBudget,
+        categoryWriteBudget,
+        approvalWriteBudget,
+        reconciliationWriteBudget,
+      },
+      req,
+      res,
+    ).catch((err: unknown) => {
       if (!res.headersSent) res.status(500).json({ error: errorText(err) });
     });
   });
@@ -193,6 +219,11 @@ interface McpDeps {
   encKey: CryptoKey;
   config: OAuthConfig;
   patReadOnly: boolean;
+  clearStatusOnly: boolean;
+  clearedWriteBudget: string | undefined;
+  categoryWriteBudget: string | undefined;
+  approvalWriteBudget: string | undefined;
+  reconciliationWriteBudget: string | undefined;
 }
 
 // Resolve the ToolContext for this request: a YNAB PAT passed straight through,
@@ -206,6 +237,15 @@ async function resolveContext(deps: McpDeps, req: express.Request, res: express.
       enabledGroups: parseToolsets("all"),
       readOnly: deps.patReadOnly,
       defaultBudget: "last-used",
+      ...(deps.clearStatusOnly
+        ? {
+            writePolicy: "clear-status" as const,
+            clearedWriteBudget: deps.clearedWriteBudget,
+            categoryWriteBudget: deps.categoryWriteBudget,
+            approvalWriteBudget: deps.approvalWriteBudget,
+            reconciliationWriteBudget: deps.reconciliationWriteBudget,
+          }
+        : {}),
     };
     return { ctx, note: "pat" };
   }
@@ -227,6 +267,14 @@ async function resolveContext(deps: McpDeps, req: express.Request, res: express.
     readOnly: grant.readOnly,
   };
   const { ctx, refreshed } = await makeToolContextFromProps(props, deps.config, fetch, Date.now());
+  ctx.readOnly = ctx.readOnly || deps.patReadOnly;
+  if (deps.clearStatusOnly) {
+    ctx.writePolicy = "clear-status";
+    ctx.clearedWriteBudget = deps.clearedWriteBudget;
+    ctx.categoryWriteBudget = deps.categoryWriteBudget;
+    ctx.approvalWriteBudget = deps.approvalWriteBudget;
+    ctx.reconciliationWriteBudget = deps.reconciliationWriteBudget;
+  }
   if (refreshed) {
     deps.store.updateGrantTokens(
       grantId,
